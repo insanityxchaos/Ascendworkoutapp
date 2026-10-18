@@ -14,58 +14,7 @@ A free, gamified training app for iPhone. Setup asks about your body, goal, equi
 
 All numbers are estimates based on published formulas, not medical advice.
 
-## Put it on your iPhone (free)
-
-Do steps 1–4 on your **Windows PC** in Chrome or Edge at **github.com**. The GitHub iPhone app can't upload files. The app files are in the **Ascend app** folder on your Desktop.
-
-### 1. Make a GitHub account
-Go to **github.com** and click **Sign up**. Follow the steps and verify your email. A verified email is required for the website to publish.
-
-### 2. Create the repository (the online folder for your app)
-1. Click the **+** in the **top-right corner** of any GitHub page, then **New repository**.
-2. **Repository name:** `ascend` (all lowercase, no spaces; this becomes part of your link).
-3. Choose **Public**. Free accounts can only publish public repositories. Nobody can see your workouts or photos; those stay on your phone.
-4. Switch **Add README** to **On**. This matters: without it, the **Add file** button in the next step won't appear.
-5. Click **Create repository**.
-
-### 3. Upload the app files
-1. On your new repository's page, above the list of files, click **Add file** → **Upload files**.
-2. Open the **Ascend app** folder on your Desktop in File Explorer. Select **everything inside it** (click inside the folder, then press **Ctrl + A**) and drag it all onto the GitHub page. The `js` and `icons` folders must come along as folders. The `.claude` folder isn't needed but doesn't hurt.
-3. Wait until the file list finishes loading. You should see `index.html`, `styles.css`, `sw.js`, `manifest.webmanifest`, `README.md`, plus files inside `js/` and `icons/`.
-4. Scroll down and click the green **Commit changes** button.
-5. If GitHub asks whether to replace the existing `README.md`, that's fine.
-
-Check: the repository page should now list the **icons** and **js** folders and **index.html** at the top level. If index.html ended up inside another folder, the site won't work. Delete it and upload the *contents* of the folder, not the folder itself.
-
-### 4. Turn on the website (GitHub Pages)
-1. In your repository, click **Settings** (the tab with a gear, in the row under the repository name). If you don't see it, click the **…** menu at the end of that row.
-2. In the left sidebar, under **Code, planning, and automation**, click **Pages**.
-3. Under **Build and deployment** → **Source**, choose **Deploy from a branch**.
-4. Under **Branch**, choose **main**, leave the folder as **/ (root)**, and click **Save**.
-5. Wait 1–10 minutes and refresh the page. A box will say **"Your site is live at …"** with a **Visit site** button. Your link looks like `https://YOUR-USERNAME.github.io/ascend/`.
-
-### 5. Install it on your iPhone
+# Install it on your iPhone
 1. On your iPhone, open that link in **Safari** (not Chrome).
 2. Tap the **Share** button (square with an arrow), scroll down, and tap **Add to Home Screen** → **Add**.
 3. Always open Ascend from the Home Screen icon.
-
-Send friends the same link; they do step 5 only. Each person's data stays on their own phone. Use **Settings → Export** inside the app to back up (photos included).
-
-### Updating the app later
-Repeat step 3 with the changed files (GitHub replaces files with the same name), then wait a few minutes. The app picks up the new version the next time you open it with internet.
-
-## Run it on your computer
-
-```bash
-py -m http.server 8765
-```
-
-Then open http://localhost:8765.
-
-## Code layout
-
-- `js/data.js`: exercise library, workout templates, strength standards, ranks
-- `js/calc.js`: units, body fat, calories, body and strength projections
-- `js/plan.js`: plan generation, daily quests, progressive overload
-- `js/photos.js`: photo storage (IndexedDB) and resizing
-- `js/app.js`: game state and all screens
