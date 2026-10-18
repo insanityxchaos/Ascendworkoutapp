@@ -1,20 +1,23 @@
 // Network-first so updates show up right away; falls back to the cache when offline.
-const CACHE = 'ascend-v2';
+const CACHE = 'ascend-v4';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './js/app.js',
-  './js/calc.js',
-  './js/data.js',
-  './js/photos.js',
-  './js/plan.js',
-  './js/util.js',
+  './app.js',
+  './art.js',
+  './calc.js',
+  './data.js',
+  './game.js',
+  './photos.js',
+  './plan.js',
+  './sound.js',
+  './util.js',
   './manifest.webmanifest',
-  './icons/icon.svg',
-  './icons/icon-180.png',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
+  './icon.svg',
+  './icon-180.png',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
 self.addEventListener('install', e => {
