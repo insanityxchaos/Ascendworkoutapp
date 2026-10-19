@@ -250,6 +250,34 @@ p.mq-label { margin: 0 0 2px; display: flex; justify-content: center; gap: 8px; 
 .side-done { display: inline-flex; align-items: center; gap: 5px; color: var(--ok); font-size: 12px; font-weight: 700; }
 .side.done b { color: var(--muted); }
 
+/* ---------- Daily Quest & workout library ---------- */
+.quest-card.system { border-color: color-mix(in srgb, var(--accent2) 55%, transparent); }
+.dq { padding: 12px 0 10px; border-top: 1px solid var(--line); }
+.dq:first-of-type { border-top: 0; }
+.dq-top { display: flex; align-items: center; gap: 10px; }
+.dq-fig { width: 52px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 9px; background: var(--field); border: 1px solid var(--line); }
+.dq-name { flex: 1; font-size: 16px; }
+.dq-count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
+.dq-count b { color: var(--text); font-size: 18px; }
+.dq.done .dq-count b { color: var(--ok); }
+.dq .bar { margin: 8px 0; }
+.dq-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dq-controls .mini { padding: 7px 12px; font-size: 13px; }
+.dq-controls .mini-reward { margin-left: auto; }
+.rank-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.rank-head h3 { margin: 0 !important; flex: 1; }
+.wk { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; border-top: 1px solid var(--line); color: var(--muted); }
+.wk:nth-of-type(1) { border-top: 0; }
+.wk-main { flex: 1; min-width: 0; }
+.wk-main b { display: block; font-family: var(--display); font-size: 16px; color: var(--text); letter-spacing: 0.02em; }
+.wk-main span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.wk-main em { display: block; font-size: 11px; color: var(--gold); margin-top: 4px; }
+.wk.locked { opacity: 0.45; }
+.wk.done .wk-main b { color: var(--ok); }
+.cal .d.w { position: relative; }
+.cal .d.w::after { content: ""; position: absolute; bottom: 3px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+.lg.wdot { width: 6px !important; height: 6px !important; border-radius: 50% !important; background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+
 /* ================= Quests ================= */
 
 .hero-card { padding: 0; overflow: hidden; }

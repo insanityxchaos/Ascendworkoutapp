@@ -2,6 +2,7 @@ import { $, esc, plural, clamp, roundTo, fmtNum, dateKey, addDays, daysBetween, 
 import {
   EQUIPMENT, EQUIPMENT_PRESETS, GOALS, EXPERIENCE, PATTERNS, TEMPLATES, SPLIT_NAMES, STATS, RANKS,
   WORKOUT_TYPES, SUGGESTIONS, DOW, WEEK_ORDER, SHOP, THEMES, TITLES, AVATAR_OPTIONS,
+  WORKOUT_LIBRARY, WORKOUT_REWARDS, RANK_ORDER,
 } from './data.js';
 import * as C from './calc.js';
 import * as P from './plan.js';
@@ -67,12 +68,14 @@ function pump() {
   for (const n of list) {
     if (n.type === 'toast') toast(n.text);
     else if (n.type === 'mini') {
-      toast(`Quest ${n.n}/${n.total} cleared · +${n.xp} XP · +${n.gold} Gold`);
+      const d = Game.dailyDef(n.id);
+      toast(`${d ? d.name : 'Goal'} cleared (${n.n}/${n.total}) · +${n.xp} XP · +${n.gold} Gold`);
       sfx('unlock');
     } else if (n.type === 'side') {
       toast(`Bonus quest cleared · +${n.xp} XP · +${n.gold} Gold`);
       sfx('coin');
-    } else if (n.type === 'quest') queueModal(questCompleteHtml(n), 'celebrate', 'quest');
+    } else if (n.type === 'session') queueModal(workoutCompleteHtml(n), 'celebrate', 'quest');
+    else if (n.type === 'quest') queueModal(questCompleteHtml(n), 'celebrate', 'quest');
     else if (n.type === 'level' && n === levels[0]) {
       queueModal(levelUpHtml(levels[0].from, levels[levels.length - 1].to), 'celebrate', 'level');
     } else if (n.type === 'rank') queueModal(rankUpHtml(n.rank), 'celebrate rank', 'rank');
@@ -153,17 +156,30 @@ function prescriptionText(e, ex) {
   return `${e.sets} × ${reps}${ex.perSide ? ' per side' : ''}${load}`;
 }
 
-const questTitle = q => (q.type === 'workout' ? TEMPLATES[q.template].name : 'Recovery Day');
-const questDesc = q => {
-  if (q.type !== 'workout') return 'Light movement so your muscles can rebuild.';
-  if (q.light) return `${plural(q.exercises.length, 'quest')} · easy cardio, core and mobility · ~15 min`;
-  return `${plural(q.exercises.length, 'quest')} · ~${S().sessionMin} min`;
-};
+const questTitle = q => (q.type === 'daily' ? 'Daily Quest' : q.type === 'workout' ? TEMPLATES[q.template].name : 'Recovery Day');
 
-// "Complete 3 sets of goblet squats" style mini quest names.
-function miniTitle(e, ex) {
-  if (ex.pattern === 'cardio') return `${ex.name}: ${fmtSec(e.hi)}`;
-  return `Complete ${plural(e.sets, 'set')} of ${ex.name}`;
+// The four Daily Quest tasks with quick-log buttons.
+function dailyItemsHtml(q) {
+  return q.items.map((item, i) => {
+    const d = Game.dailyDef(item.id);
+    const unit = d.unit === 'km' ? ' km' : '';
+    return `
+      <div class="dq${item.cleared ? ' done' : ''}">
+        <div class="dq-top">
+          <span class="dq-fig">${figure(d.figure, 46)}</span>
+          <b class="dq-name">${d.name}</b>
+          <span class="dq-count"><b>${fmtNum(item.progress)}</b> / ${fmtNum(item.target)}${unit}</span>
+        </div>
+        <div class="bar${item.cleared ? ' ok' : ''}"><i style="width:${Math.min(100, (item.progress / item.target) * 100)}%"></i></div>
+        ${item.cleared ? `<span class="side-done">${icon('check', 14)} Cleared · +${item.xp} XP · +${item.gold} Gold</span>` : q.complete ? '' : `
+          <div class="dq-controls">
+            <button class="mini" data-action="dq-step" data-v="${i}" data-amt="${-d.steps[0]}" aria-label="Undo ${fmtNum(d.steps[0])}">−${fmtNum(d.steps[0])}</button>
+            ${d.steps.map(st => `<button class="mini" data-action="dq-step" data-v="${i}" data-amt="${st}">+${fmtNum(st)}</button>`).join('')}
+            <button class="mini ok" data-action="dq-done" data-v="${i}">Done</button>
+            ${miniReward(item)}
+          </div>`}
+      </div>`;
+  }).join('');
 }
 
 function rewardsHtml(q) {
@@ -564,10 +580,7 @@ function homeScreen() {
   const r = Game.rankFor(s.level);
   const need = Game.xpNeeded(s.level);
   const q = Game.todayQuest();
-  const { done, total } = Game.questProgress(q);
   const streak = Game.computeStreak();
-  const started = done > 0;
-  const action = q.type === 'workout' ? 'start-workout' : 'go';
 
   const banners = [];
   if (s.statPoints) banners.push(`<button class="banner-row" data-action="go" data-v="stats">${icon('star', 18)}<span>You have <b>${plural(s.statPoints, 'stat point')}</b> to allocate</span>${icon('chevron', 16)}</button>`);
@@ -605,25 +618,9 @@ function homeScreen() {
 
     ${banners.join('')}
 
-    <section class="card quest-card${q.complete ? ' cleared' : ''}">
-      <div class="row-between"><span class="eyebrow">Today's Quests · ${Game.miniCleared(q)}/${q.type === 'workout' ? q.exercises.length : 1}</span><span class="muted small">${icon('timer', 14)} <span class="countdown"></span></span></div>
-      <h2 class="quest-title">${questTitle(q)}</h2>
-      <p class="muted small">${questDesc(q)}</p>
-      <div class="bar"><i style="width:${(done / total) * 100}%"></i></div>
-      ${q.type === 'workout' ? `<div class="mini-list">${q.exercises.map((e, i) => {
-        const ex = P.exById(e.id);
-        const cleared = e.done.every(Boolean);
-        return `<button class="mini-quest${cleared ? ' done' : ''}" data-action="start-workout" data-v="${i}" ${q.complete ? 'disabled' : ''}>
-          <span class="mq-check">${cleared ? icon('check', 14) : i + 1}</span>
-          <span class="mq-text">${miniTitle(e, ex)}</span>
-          ${cleared ? '' : miniReward(e)}
-        </button>`;
-      }).join('')}</div>` : ''}
-      ${q.complete ? '<div class="stamp">Quest Clear</div>' : `
-        <p class="hint">Clear every quest for a bonus: <b class="accent">+${q.bonusXp ?? q.reward} XP</b>${(q.bonusGold ?? Game.questGold(q)) ? ` · <b class="gold-text">+${q.bonusGold ?? Game.questGold(q)} Gold</b>` : ''}</p>
-        <button class="btn" data-action="${action}" data-v="quests">${started ? 'Continue Workout' : 'Start Workout'}</button>
-        <p class="warn">Uncleared quests at midnight = XP penalty</p>`}
-    </section>
+    ${dailyCardHtml(q)}
+
+    ${todayWorkoutHtml()}
 
     ${sideQuestsHtml(true)}
 
@@ -639,67 +636,150 @@ function homeScreen() {
 let openDay = null;
 const extraDraft = { name: '', type: 'cardio', minutes: 30 };
 
-function questsScreen() {
-  const s = S();
-  const q = Game.todayQuest();
-  const workout = q.type === 'workout';
-  const { done, total } = Game.questProgress(q);
-  const pic = workout ? q.exercises[0] && q.exercises[0].pattern : 'stand';
+let questTab = 'daily';
 
-  const desc = workout
-    ? q.exercises.map((e, i) => {
-      const ex = P.exById(e.id);
-      const sets = e.done.filter(Boolean).length;
-      const cleared = sets === e.sets;
-      return `<div class="mq-card${cleared ? ' done' : ''}">
-        <div class="ex-fig">${figure(e.pattern, 54)}</div>
-        <div class="ex-main">
-          <span class="mq-label">Quest ${i + 1}${cleared ? ' · Cleared' : ''}</span>
-          <b>${miniTitle(e, ex)}</b>
-          <span>${prescriptionText(e, ex)}</span>
-          ${cleared ? '' : miniReward(e)}
-        </div>
-        <span class="ex-count">${sets}/${e.sets}</span>
-        ${q.complete ? '' : `<button class="mini-btn" data-action="start-workout" data-v="${i}" aria-label="Start ${ex.name}">${icon('chevron', 16)}</button>`}
-      </div>`;
-    }).join('')
-    : q.tasks.map(t => `
-      <button class="task${t.done ? ' on' : ''}" data-action="task" data-id="${t.id}" ${q.complete ? 'disabled' : ''}>
-        <i>${t.done ? icon('check', 16) : ''}</i><span>${esc(t.name)}</span>
-      </button>`).join('');
-
+function dailyCardHtml(q) {
   return `
-    ${pageHead('Daily Quest')}
-    <section class="card hero-card">
-      <div class="hero-scene">${scene({ seed: 12, w: 400, h: 190, picto: pic, moon: false, sparks: 12 })}</div>
-      <div class="hero-body">
-        <span class="eyebrow">${prettyDate(dateKey(), { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-        <h2 class="quest-title">${questTitle(q)}</h2>
-        <p class="muted small">${questDesc(q)}</p>
-        <div class="row-between small"><span>${workout ? `${Game.miniCleared(q)} / ${q.exercises.length} quests` : `${done} / ${total} tasks`}</span><span class="muted">${icon('timer', 14)} <span class="countdown"></span></span></div>
+    <section class="card quest-card system${q.complete ? ' cleared' : ''}">
+      <div class="row-between"><span class="eyebrow glow">[ Daily Quest ]</span><span class="muted small">${icon('timer', 14)} <span class="countdown"></span></span></div>
+      <h2 class="quest-title">Strength Training</h2>
+      <p class="muted small">The System has assigned today's training · ${Game.miniCleared(q)}/${q.items.length} cleared</p>
+      <div class="bar"><i style="width:${Game.questFraction(q) * 100}%"></i></div>
+      ${dailyItemsHtml(q)}
+      ${q.complete ? '<div class="stamp">Quest Clear</div>' : `
+        <p class="hint">Clear all four for a bonus: <b class="accent">+${q.bonusXp} XP</b>${q.bonusGold ? ` · <b class="gold-text">+${q.bonusGold} Gold</b>` : ''}</p>
+        <p class="warn">WARNING: Failing to complete the Daily Quest will result in a penalty.</p>`}
+    </section>`;
+}
+
+const sessionSets = sess => {
+  const all = sess.exercises.flatMap(e => e.done);
+  return { done: all.filter(Boolean).length, total: all.length };
+};
+
+// Home card: the workout in progress, or today's optional workout suggestion.
+function todayWorkoutHtml() {
+  const sess = Game.activeSession();
+  if (sess) {
+    const { done, total } = sessionSets(sess);
+    return `
+      <section class="card">
+        <div class="row-between"><span class="eyebrow">Workout in Progress</span>${sess.rank ? emblem(sess.rank, RANKS.find(r => r.rank === sess.rank).color, { size: 30 }) : ''}</div>
+        <h2 class="quest-title">${esc(sess.name)}</h2>
+        <div class="row-between small"><span>${done} / ${total} sets</span><button class="link" data-action="abandon-session">Quit</button></div>
         <div class="bar"><i style="width:${(done / total) * 100}%"></i></div>
-        <h3>Total Rewards</h3>
+        <button class="btn" data-action="start-workout">Continue Workout</button>
+      </section>`;
+  }
+  const p = Game.programToday();
+  const paid = Game.paidToday('program', p.template);
+  return `
+    <section class="card">
+      <div class="row-between"><span class="eyebrow">Optional Workout</span><span class="muted small">Extra XP & Gold</span></div>
+      <h2 class="quest-title">My Program: ${p.name}</h2>
+      <p class="muted small">${plural(p.exercises.length, 'exercise')} built from your goal and equipment${paid ? ' · cleared today' : ''}</p>
+      <div class="row">
+        <button class="btn${paid ? ' ghost' : ''}" data-action="start-session" data-kind="program" data-id="">${paid ? 'Repeat' : 'Start'}</button>
+        <button class="btn ghost" data-action="browse-workouts">Browse Workouts</button>
+      </div>
+    </section>`;
+}
+
+function questsScreen() {
+  return `
+    ${pageHead('Quests')}
+    ${seg('quest-tab', [['daily', 'Daily Quest'], ['workouts', 'Workouts']], questTab)}
+    ${questTab === 'daily' ? dailyView() : workoutsView()}`;
+}
+
+function dailyView() {
+  const q = Game.todayQuest();
+  return `
+    <section class="card hero-card">
+      <div class="hero-scene">${scene({ seed: 12, w: 400, h: 160, picto: 'hpush', moon: false, sparks: 12, bolts: 1 })}</div>
+      <div class="hero-body">
+        <p class="eyebrow glow">[ The Daily Quest has arrived ]</p>
+        <h2 class="quest-title">Strength Training</h2>
+        <p class="muted small">${prettyDate(dateKey(), { weekday: 'long', month: 'long', day: 'numeric' })} · resets in <span class="countdown"></span></p>
+        <div class="bar"><i style="width:${Game.questFraction(q) * 100}%"></i></div>
+        <h3>Goals</h3>
+        ${dailyItemsHtml(q)}
+        <h3>Rewards</h3>
         ${rewardsHtml(q)}
-        ${workout && !q.complete ? `<p class="hint" style="margin-top:6px">Each quest pays its share as you clear it. Clearing all of them adds a bonus of +${q.bonusXp} XP and +${q.bonusGold} Gold.</p>` : ''}
-        <h3>${workout ? 'Quests' : 'Tasks'}</h3>
-        <div class="${workout ? '' : 'tasks'}">${desc}</div>
-        ${q.complete ? '<div class="stamp">Quest Clear</div>'
-          : workout ? `<button class="btn" data-action="start-workout">${done ? 'Continue Quests' : 'Start Quests'}</button>`
-            : '<p class="hint center">Tap each task when it\'s done. Recovery days let your muscles rebuild.</p>'}
+        <p class="hint">Each goal pays its share the moment you finish it. Clearing all four adds +${q.bonusXp} XP${q.bonusGold ? ` and +${q.bonusGold} Gold` : ''}.</p>
+        ${q.complete ? '<div class="stamp">Quest Clear</div>' : '<p class="warn">WARNING: Failing to complete the Daily Quest will result in a penalty.</p>'}
+        <p class="hint">Goals grow as you level up, all the way to 100 push-ups, 100 sit-ups, 100 squats and a 10 km run at S-Rank.</p>
       </div>
     </section>
-
     ${sideQuestsHtml()}
-
-    <section class="card">
-      <div class="row-between"><h3>This Week</h3><button class="link" data-action="open-profile">Edit plan</button></div>
-      ${weekHtml(q)}
-    </section>
-
     ${extraHtml()}`;
 }
 
-function weekHtml(q) {
+function workoutsView() {
+  const s = S();
+  const myRank = Game.rankFor(s.level).rank;
+  const library = RANK_ORDER.map(rk => {
+    const color = RANKS.find(r => r.rank === rk).color;
+    return `
+      <section class="card">
+        <div class="rank-head">${emblem(rk, color, { size: 34 })}<h3>${rk}-Rank Workouts</h3>${rk === myRank ? '<span class="chip">Your rank</span>' : ''}</div>
+        ${WORKOUT_LIBRARY.filter(w => w.rank === rk).map(w => {
+          const locked = Game.workoutLocked(w);
+          const done = Game.paidToday('library', w.id);
+          const [xp, gold] = WORKOUT_REWARDS[w.rank];
+          return `
+            <button class="wk${locked ? ' locked' : ''}${done ? ' done' : ''}" data-action="${locked ? 'wk-locked' : 'wk-open'}" data-id="${w.id}">
+              <div class="wk-main">
+                <b>${w.name}</b>
+                <span>${w.desc}</span>
+                <em>~${w.min} min · ${plural(w.exercises.length, 'exercise')} · +${xp} XP · +${gold} Gold</em>
+              </div>
+              ${locked ? icon('lock', 18) : done ? `<span class="check">${icon('check', 16)}</span>` : icon('chevron', 16)}
+            </button>`;
+        }).join('')}
+      </section>`;
+  }).join('');
+
+  return `
+    ${todayWorkoutHtml()}
+    <section class="card">
+      <div class="row-between"><h3>My Program · This Week</h3><button class="link" data-action="open-profile">Edit plan</button></div>
+      ${weekHtml()}
+    </section>
+    <p class="hint center">Workouts are optional extras on top of the Daily Quest. Each pays XP and Gold once per day. You can take on workouts up to one rank above your own.</p>
+    ${library}`;
+}
+
+function openWorkout(id) {
+  const w = WORKOUT_LIBRARY.find(x => x.id === id);
+  if (!w) return;
+  const [xp, gold] = WORKOUT_REWARDS[w.rank];
+  const color = RANKS.find(r => r.rank === w.rank).color;
+  const paid = Game.paidToday('library', w.id);
+  queueModal(`
+    <div class="center">${emblem(w.rank, color, { size: 64 })}</div>
+    <h2 class="modal-title">${w.name}</h2>
+    <p class="sub">${w.desc}</p>
+    <p class="sub">~${w.min} min · <b class="accent">+${xp} XP</b> · <b class="gold-text">+${gold} Gold</b></p>
+    ${paid ? '<p class="hint center">Already cleared today. You can repeat it for practice, but rewards are once per day.</p>' : ''}
+    <div class="day-detail">${w.exercises.map(([exId, sets, target]) => {
+      const ex = P.exById(exId);
+      return `<div class="day-ex"><b>${ex.name}</b><span>${prescriptionText({ sets, lo: target, hi: target }, ex)}</span></div>`;
+    }).join('')}</div>
+    <button class="btn" data-action="start-session" data-kind="library" data-id="${w.id}">${paid ? 'Repeat Workout' : 'Start Workout'}</button>
+    <button class="btn ghost" data-action="close">Close</button>`);
+}
+
+function beginSession(kind, id) {
+  const cur = Game.activeSession();
+  const same = cur && cur.kind === kind && (kind === 'program' || cur.id === id);
+  if (cur && !same && Game.sessionStarted(cur) && !confirm(`Quit "${cur.name}"? The sets you logged in it won't count.`)) return;
+  if (!same && !Game.startSession(kind, id)) return toast('Rank up to unlock this workout');
+  if (currentModal) nextModal();
+  startWorkout();
+}
+
+function weekHtml() {
   const todayDow = new Date().getDay();
   return WEEK_ORDER.map(d => {
     const t = P.templateForDay(S(), d);
@@ -707,8 +787,7 @@ function weekHtml(q) {
     let detail = '';
     if (openDay === d) {
       const dayKey = addDays(Game.weekStart(), (d + 6) % 7);
-      const list = isToday && q.type === 'workout' ? q.exercises
-        : t ? P.buildWorkout(S(), t) : P.buildRecoveryWorkout(S(), dayKey);
+      const list = P.buildProgramSession(S(), dayKey).exercises;
       detail = `<div class="day-detail">${list.map(e => {
         const ex = P.exById(e.id);
         return `<div class="day-ex"><b>${ex.name}</b><span>${prescriptionText(e, ex)}</span></div>`;
@@ -760,9 +839,12 @@ function restSeconds(e) {
 }
 
 function startWorkout(i) {
-  const q = Game.todayQuest();
-  if (q.type !== 'workout') return go('quests');
-  const firstOpen = q.exercises.findIndex(e => e.done.some(d => !d));
+  const sess = Game.activeSession();
+  if (!sess) {
+    questTab = 'workouts';
+    return go('quests');
+  }
+  const firstOpen = sess.exercises.findIndex(e => e.done.some(d => !d));
   wIdx = Number.isInteger(i) ? i : Math.max(0, firstOpen);
   rest = null;
   timer = null;
@@ -771,14 +853,17 @@ function startWorkout(i) {
 }
 
 function workoutScreen() {
-  const q = Game.todayQuest();
-  if (q.type !== 'workout') return questsScreen();
-  const n = q.exercises.length;
+  const sess = Game.activeSession();
+  if (!sess) {
+    route = 'quests';
+    return questsScreen();
+  }
+  const n = sess.exercises.length;
   wIdx = clamp(wIdx, 0, n - 1);
-  const e = q.exercises[wIdx];
+  const e = sess.exercises[wIdx];
   const ex = P.exById(e.id);
-  const { done, total } = Game.questProgress(q);
-  const exDone = q.exercises.filter(x => x.done.every(Boolean)).length;
+  const { done, total } = sessionSets(sess);
+  const exDone = sess.exercises.filter(x => x.done.every(Boolean)).length;
   const setIdx = e.done.findIndex(d => !d);
   const time = ex.kind === 'time';
   const last = Game.lastPerformance(e.id);
@@ -821,12 +906,12 @@ function workoutScreen() {
     <section class="workout">
       <header class="pagehead sub">
         <button class="back" data-action="back" aria-label="Back">${icon('back', 22)}</button>
-        <h1 class="title">Quest <span class="accent">${wIdx + 1}/${n}</span></h1>
+        <h1 class="title">${esc(sess.name)} <span class="accent">${wIdx + 1}/${n}</span></h1>
         <div class="pagehead-right"><button class="icon-btn" data-action="w-list" aria-label="All exercises">${icon('list', 20)}</button></div>
       </header>
       <div class="bar thin"><i style="width:${(done / total) * 100}%"></i></div>
-      <div class="pips">${q.exercises.map((x, k) => `<button class="pip${k === wIdx ? ' cur' : ''}${x.done.every(Boolean) ? ' done' : ''}" data-action="w-go" data-v="${k}" aria-label="Exercise ${k + 1}"></button>`).join('')}</div>
-      <p class="mq-label center">${miniTitle(e, ex)} ${e.done.every(Boolean) ? '· Cleared' : miniReward(e)}</p>
+      <div class="pips">${sess.exercises.map((x, k) => `<button class="pip${k === wIdx ? ' cur' : ''}${x.done.every(Boolean) ? ' done' : ''}" data-action="w-go" data-v="${k}" aria-label="Exercise ${k + 1}"></button>`).join('')}</div>
+      <p class="mq-label center">${sess.rank ? `${sess.rank}-Rank workout` : 'My Program'} · <span class="mini-reward">+${sess.reward} XP · +${sess.gold} ${coin(12)}</span></p>
       <h2 class="ex-title">${ex.name}</h2>
       <p class="ex-sub">${setIdx < 0 ? 'All sets done' : `Set ${setIdx + 1} of ${e.sets}`} · ${prescriptionText(e, ex)} · ${exDone}/${n} cleared</p>
       <div class="ex-scene">${scene({ seed: 50 + wIdx, w: 400, h: 180, picto: e.pattern, moon: false, sparks: 10 })}</div>
@@ -842,22 +927,23 @@ function workoutScreen() {
 }
 
 function completeCurrentSet(reps) {
-  const q = Game.todayQuest();
-  const e = q.exercises[wIdx];
+  const sess = Game.activeSession();
+  const e = sess && sess.exercises[wIdx];
   if (!e) return;
   const j = Game.completeSet(wIdx, reps);
   if (j < 0) return;
   sfx('set');
   timer = null;
-  if (q.complete) {
+  if (!Game.activeSession()) { // that was the last set: the workout is finished
     rest = null;
-    go('home');
+    questTab = 'workouts';
+    go(workoutReturn === 'workout' ? 'quests' : workoutReturn);
     pump();
     return;
   }
   if (!e.done.some(d => !d)) {
-    const next = q.exercises.findIndex((x, k) => k > wIdx && x.done.some(d => !d));
-    const any = next >= 0 ? next : q.exercises.findIndex(x => x.done.some(d => !d));
+    const next = sess.exercises.findIndex((x, k) => k > wIdx && x.done.some(d => !d));
+    const any = next >= 0 ? next : sess.exercises.findIndex(x => x.done.some(d => !d));
     if (any >= 0) wIdx = any;
   }
   const secs = restSeconds(e);
@@ -892,19 +978,21 @@ function updateTimers() {
 }
 
 function workoutListHtml() {
-  const q = Game.todayQuest();
+  const sess = Game.activeSession();
+  if (!sess) return '<button class="btn ghost" data-action="close">Close</button>';
   return `
-    <h2 class="modal-title">${questTitle(q)}</h2>
-    <div class="options">${q.exercises.map((e, k) => {
+    <h2 class="modal-title">${esc(sess.name)}</h2>
+    <div class="options">${sess.exercises.map((e, k) => {
       const ex = P.exById(e.id);
       return `<button class="option${k === wIdx ? ' on' : ''}" data-action="w-go" data-v="${k}"><b>${ex.name} · ${e.done.filter(Boolean).length}/${e.sets}</b><span>${prescriptionText(e, ex)}</span></button>`;
     }).join('')}</div>
+    <button class="btn danger" data-action="abandon-session">Quit Workout</button>
     <button class="btn ghost" data-action="close">Close</button>`;
 }
 
 function openSwap(i) {
-  const q = Game.todayQuest();
-  const e = q.exercises[i];
+  const sess = Game.activeSession();
+  const e = sess && sess.exercises[i];
   if (!e || e.done.some(Boolean)) return toast('Undo the logged sets first');
   const options = P.candidates(S(), e.pattern).all.filter(x => x.id !== e.id);
   if (!options.length) return toast('No other options with your equipment');
@@ -1032,25 +1120,31 @@ function potentialHtml() {
 
 function recordHtml() {
   const s = S();
-  const workouts = Object.values(s.quests).filter(q => q.complete && !Game.isLight(q));
+  const workouts = Game.allSessions().filter(w => !w.light);
   let sets = 0;
-  let volume = 0;
-  for (const q of workouts) {
-    for (const e of q.exercises) {
-      for (const d of e.done) {
-        sets++;
-        if (d.w) volume += C.toDispW(s, d.w) * d.r;
-      }
-    }
+  for (const w of workouts) for (const e of w.exercises) sets += e.done.filter(Boolean).length;
+  const totals = { pushups: 0, situps: 0, squats: 0, run: 0 };
+  let dailies = 0;
+  for (const q of Object.values(s.quests)) {
+    if (q.complete) dailies++;
+    if (q.type === 'daily') for (const i of q.items) totals[i.id] += i.progress;
   }
+  const big = v => (v >= 10000 ? `${fmtNum(v / 1000, 0)}k` : fmtNum(v, 1));
   return `
     <section class="card">
       <h3>Record</h3>
       <div class="tiles cols-2">
-        <div class="tile"><b>${workouts.length}</b><span>Workouts</span></div>
+        <div class="tile"><b>${dailies}</b><span>Daily Quests</span></div>
         <div class="tile"><b>${Math.max(s.bestStreak, Game.computeStreak())}</b><span>Best streak</span></div>
+        <div class="tile"><b>${workouts.length}</b><span>Workouts</span></div>
         <div class="tile"><b>${sets}</b><span>Sets logged</span></div>
-        <div class="tile"><b>${volume >= 10000 ? `${fmtNum(volume / 1000, 0)}k` : fmtNum(volume, 0)}</b><span>Volume (${C.wUnit(s)})</span></div>
+      </div>
+      <h3 style="margin-top:14px">Lifetime (Daily Quest)</h3>
+      <div class="tiles cols-2">
+        <div class="tile"><b>${big(totals.pushups)}</b><span>Push-ups</span></div>
+        <div class="tile"><b>${big(totals.situps)}</b><span>Sit-ups</span></div>
+        <div class="tile"><b>${big(totals.squats)}</b><span>Squats</span></div>
+        <div class="tile"><b>${big(totals.run)}</b><span>km run</span></div>
       </div>
     </section>`;
 }
@@ -1262,16 +1356,24 @@ let calMonth = null;
 function historyScreen() {
   const s = S();
   const items = [];
-  for (const [k, q] of Object.entries(s.quests)) {
-    if (!q.complete) continue;
-    const light = Game.isLight(q);
-    if (histFilter !== 'all' && histFilter !== (light ? 'recovery' : 'workout')) continue;
-    const sets = q.type === 'workout' ? q.exercises.reduce((n, e) => n + e.done.length, 0) : 0;
-    items.push({
-      k, ts: q.completedAt || 0, key: k, icon: light ? 'moon' : 'dumbbell', title: questTitle(q),
-      detail: q.type === 'workout' ? `${plural(q.exercises.length, 'exercise')} · ${plural(sets, 'set')}` : 'Recovery quest',
-      xp: q.xpEarned ?? q.reward, gold: q.goldEarned ?? Game.questGold(q), q,
-    });
+  if (histFilter === 'all' || histFilter === 'daily') {
+    for (const [k, q] of Object.entries(s.quests)) {
+      if (!q.complete || q.type === 'workout') continue; // older plan-based workouts are listed with workouts
+      const detail = q.type === 'daily'
+        ? q.items.map(i => `${fmtNum(i.target)}${i.id === 'run' ? ' km run' : ` ${Game.dailyDef(i.id).name.toLowerCase()}`}`).join(' · ')
+        : 'Recovery quest';
+      items.push({ k, ts: q.completedAt || 0, key: `q:${k}`, icon: 'quest', title: 'Daily Quest cleared', detail, xp: q.xpEarned ?? q.reward, gold: q.goldEarned ?? Game.questGold(q) });
+    }
+  }
+  if (histFilter === 'all' || histFilter === 'workout') {
+    for (const w of Game.allSessions()) {
+      const sets = w.exercises.reduce((n, e) => n + e.done.filter(Boolean).length, 0);
+      items.push({
+        k: w.date, ts: w.completedAt || 0, key: `w:${w.date}:${w.completedAt}`, icon: w.light ? 'moon' : 'dumbbell', title: w.name,
+        detail: `${w.rank ? `${w.rank}-Rank · ` : ''}${plural(w.exercises.length, 'exercise')} · ${plural(sets, 'set')}${w.paid ? '' : ' · repeat'}`,
+        xp: w.xp, gold: w.gold, session: w,
+      });
+    }
   }
   if (histFilter === 'all' || histFilter === 'extra') {
     for (const l of s.logs) items.push({ k: l.date, ts: l.ts, key: l.id, icon: 'bolt', title: l.name, detail: `${WORKOUT_TYPES[l.type] || 'Activity'} · ${l.minutes} min`, xp: l.xp, gold: 0 });
@@ -1281,7 +1383,7 @@ function historyScreen() {
   return `
     ${subHead('Workout History')}
     <section class="card">${calendarHtml()}</section>
-    ${seg('hist-filter', [['all', 'All'], ['workout', 'Workouts'], ['recovery', 'Recovery'], ['extra', 'Extra']], histFilter)}
+    ${seg('hist-filter', [['all', 'All'], ['daily', 'Daily'], ['workout', 'Workouts'], ['extra', 'Extra']], histFilter)}
     <section class="card list">
       ${items.length ? items.slice(0, 60).map(i => `
         <button class="hist" data-action="hist-open" data-id="${i.key}">
@@ -1294,10 +1396,11 @@ function historyScreen() {
           </div>
           <span class="check">${icon('check', 16)}</span>
         </button>
-        ${histOpen === i.key && i.q && i.q.type === 'workout' ? `<div class="day-detail">${i.q.exercises.map(e => {
+        ${histOpen === i.key && i.session ? `<div class="day-detail">${i.session.exercises.map(e => {
           const ex = P.exById(e.id);
-          return `<div class="day-ex"><b>${ex.name}</b><span>${e.done.map(d => d.r).join(', ')}${ex.kind === 'time' ? ' s' : ' reps'}${ex.kind === 'load' ? ` @ ${C.fmtW(S(), e.done[0].w)}` : ''}</span></div>`;
-        }).join('')}</div>` : ''}`).join('') : '<p class="empty">No cleared quests yet. Your first one is waiting on the Home tab.</p>'}
+          const sets = e.done.filter(Boolean);
+          return `<div class="day-ex"><b>${ex.name}</b><span>${sets.map(d => d.r).join(', ')}${ex.kind === 'time' ? ' s' : ' reps'}${ex.kind === 'load' && sets[0] ? ` @ ${C.fmtW(S(), sets[0].w)}` : ''}</span></div>`;
+        }).join('')}</div>` : ''}`).join('') : '<p class="empty">Nothing cleared yet. Your first Daily Quest is waiting on the Home tab.</p>'}
     </section>`;
 }
 
@@ -1315,10 +1418,11 @@ function calendarHtml() {
     const k = dateKey(new Date(y, m, d));
     const q = s.quests[k];
     let cls = 'd';
-    if (q && q.complete) cls += Game.isLight(q) ? ' rec' : ' done';
+    if (q && q.complete) cls += ' done';
     else if (s.shielded[k]) cls += ' shield';
     else if (k < today && k >= s.created) cls += ' miss';
     if (k === today) cls += ' today';
+    if (Game.sessionsOn(k).length || (q && q.type === 'workout' && q.complete)) cls += ' w';
     cells += `<div class="${cls}">${d}</div>`;
   }
   return `
@@ -1329,7 +1433,7 @@ function calendarHtml() {
     </div>
     <div class="cal">${cells}</div>
     <div class="legend">
-      <span><i class="lg done"></i>Workout</span><span><i class="lg rec"></i>Recovery</span><span><i class="lg miss"></i>Missed</span><span><i class="lg shield"></i>Shielded</span>
+      <span><i class="lg done"></i>Daily Quest</span><span><i class="lg wdot"></i>Workout</span><span><i class="lg miss"></i>Missed</span><span><i class="lg shield"></i>Shielded</span>
     </div>`;
 }
 
@@ -1541,8 +1645,9 @@ function backupDone() {
 }
 
 const WHATS_NEW = [
-  ['quest', 'Every day is a workout', 'Off days are now a short Active Recovery workout instead of a checklist.'],
-  ['target', 'Mini quests', 'Each exercise is its own quest with its own XP and Gold, plus a bonus for clearing them all.'],
+  ['quest', 'The classic Daily Quest', 'Every day: push-ups, sit-ups, squats and a run. Goals grow with your level, up to 100 / 100 / 100 / 10 km at S-Rank.'],
+  ['dumbbell', 'Workout library', '12 workouts ranked E to S, from Awakening to Hero\'s Hundred. Higher ranks unlock as you rank up.'],
+  ['target', 'My Program', 'Your personalized plan is now an optional workout in the Workouts tab.'],
   ['star', 'Bonus quests', 'Two optional daily challenges for extra rewards. No penalty for skipping.'],
   ['user', 'Your character', 'A new anime-style Player character. Want your own look? Upload your own art in Character → Customize.'],
   ['data', 'Backup reminders', 'A weekly nudge to save your progress to Files or iCloud Drive.'],
@@ -1760,9 +1865,9 @@ function questCompleteHtml(n) {
   return `
     <div class="burst"></div>
     <div class="celebrate-body">
-      <p class="eyebrow glow">${n.q.type === 'workout' ? TEMPLATES[n.q.template].name : 'Recovery Quest'}</p>
+      <p class="eyebrow glow">[ Daily Quest ]</p>
       <h1 class="display big">Quest<br>Complete!</h1>
-      ${n.q.type === 'workout' ? '<p class="muted" style="margin:10px 0 0">All quests cleared · Clear bonus</p>' : ''}
+      <p class="muted" style="margin:10px 0 0">All goals cleared · Clear bonus</p>
       <div class="reward-big">${icon('star', 22)} +${n.xp} XP</div>
       <div class="reward-big gold">${coin(22)} +${n.gold} Gold</div>
       ${n.totalXp && n.totalXp !== n.xp ? `<p class="muted small">Today's total: ${n.totalXp} XP · ${n.totalGold} Gold</p>` : ''}
@@ -1770,6 +1875,26 @@ function questCompleteHtml(n) {
       ${gains.length ? `<div class="gain-row">${gains.map(([k, v]) => `<span>${STATS.find(x => x.key === k).abbr} +${v}</span>`).join('')}</div>` : ''}
       ${n.notes.length ? `<div class="notes">${n.notes.map(t => `<p>▲ ${esc(t)}</p>`).join('')}</div>` : ''}
       <p class="muted">${icon('flame', 14)} Streak: ${plural(n.streak, 'day')}</p>
+      <button class="btn" data-action="close">Continue</button>
+    </div>`;
+}
+
+function workoutCompleteHtml(n) {
+  const gains = Object.entries(n.gains || {}).filter(([, v]) => v);
+  const rc = n.rank ? RANKS.find(r => r.rank === n.rank).color : null;
+  return `
+    <div class="burst"></div>
+    <div class="celebrate-body">
+      <p class="eyebrow glow">${n.rank ? `${n.rank}-Rank Workout` : 'My Program'}</p>
+      ${rc ? `<div class="center">${emblem(n.rank, rc, { size: 72 })}</div>` : ''}
+      <h1 class="display big">Workout<br>Complete!</h1>
+      <p class="lead">${esc(n.name)}</p>
+      ${n.paid ? `
+        <div class="reward-big">${icon('star', 22)} +${n.xp} XP</div>
+        <div class="reward-big gold">${coin(22)} +${n.gold} Gold</div>`
+        : '<p class="muted">Repeat clear. Rewards are once per workout per day, but your attributes still grew.</p>'}
+      ${gains.length ? `<div class="gain-row">${gains.map(([k, v]) => `<span>${STATS.find(x => x.key === k).abbr} +${v}</span>`).join('')}</div>` : ''}
+      ${n.notes.length ? `<div class="notes">${n.notes.map(t => `<p>▲ ${esc(t)}</p>`).join('')}</div>` : ''}
       <button class="btn" data-action="close">Continue</button>
     </div>`;
 }
@@ -1857,19 +1982,38 @@ document.addEventListener('click', e => {
 
     // Quest & workout
     case 'start-workout': startWorkout(v === undefined ? undefined : Number(v)); break;
-    case 'task': Game.toggleTask(id); sfx('set'); render(); pump(); break;
+    case 'dq-step': Game.dailyStep(Number(v), Number(el.dataset.amt)); sfx('tap'); render(); pump(); break;
+    case 'dq-done': Game.dailyFinish(Number(v)); sfx('set'); render(); pump(); break;
+    case 'quest-tab': questTab = v; render(); break;
+    case 'browse-workouts': questTab = 'workouts'; go('quests'); break;
+    case 'wk-open': openWorkout(id); break;
+    case 'wk-locked': {
+      const w = WORKOUT_LIBRARY.find(x => x.id === id);
+      toast(`Reach ${RANK_ORDER[RANK_ORDER.indexOf(w.rank) - 1]}-Rank to unlock ${w.rank}-Rank workouts`);
+      break;
+    }
+    case 'start-session': beginSession(kind, id); break;
+    case 'abandon-session':
+      if (confirm('Quit this workout? The sets you logged won\'t count.')) {
+        Game.abandonSession();
+        rest = null;
+        timer = null;
+        if (currentModal) nextModal();
+        if (route === 'workout') { questTab = 'workouts'; go('quests'); } else render();
+      }
+      break;
     case 'cur': Game.adjustCurrent(wIdx, Number(v)); render(); break;
     case 'w': Game.adjustWeight(wIdx, Number(v)); render(); break;
     case 'w-complete': completeCurrentSet(); break;
     case 'w-timer': {
-      const e2 = Game.todayQuest().exercises[wIdx];
+      const e2 = Game.activeSession().exercises[wIdx];
       timer = timer ? null : { until: Date.now() + e2.cur * 1000, total: e2.cur };
       render();
       break;
     }
-    case 'w-next': wIdx = (wIdx + 1) % Game.todayQuest().exercises.length; rest = null; timer = null; render(); break;
+    case 'w-next': wIdx = (wIdx + 1) % Game.activeSession().exercises.length; rest = null; timer = null; render(); break;
     case 'w-prev': {
-      const n = Game.todayQuest().exercises.length;
+      const n = Game.activeSession().exercises.length;
       wIdx = (wIdx - 1 + n) % n;
       rest = null;
       timer = null;

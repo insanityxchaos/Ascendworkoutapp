@@ -106,7 +106,7 @@ export function buildRecovery(s) {
   ];
 }
 
-const fixedEntry = (ex, slotKey, sets, target) => ({
+export const fixedEntry = (ex, slotKey, sets, target) => ({
   id: ex.id, slotKey, pattern: ex.pattern, main: false, sets, lo: target, hi: target, w: null, cur: target, done: Array(sets).fill(null),
 });
 
@@ -159,7 +159,18 @@ export function buildQuest(s, dayKey) {
   return splitRewards(q);
 }
 
-export const questStarted = q => (q.type === 'workout' ? q.exercises.some(e => e.done.some(Boolean)) : q.tasks.some(t => t.done));
+// "My Program": the personalized plan for a given day, run as an optional workout.
+export function buildProgramSession(s, dayKey) {
+  const template = templateForDay(s, parseKey(dayKey).getDay());
+  if (template) return { template, light: false, exercises: buildWorkout(s, template) };
+  return { template: 'recovery', light: true, exercises: buildRecoveryWorkout(s, dayKey) };
+}
+
+export function questStarted(q) {
+  if (q.type === 'daily') return q.items.some(i => i.progress > 0);
+  if (q.type === 'workout') return q.exercises.some(e => e.done.some(Boolean));
+  return q.tasks.some(t => t.done);
+}
 
 // Distinct exercises across the weekly plan (used for strength potential).
 export function planExercises(s) {

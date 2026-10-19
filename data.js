@@ -124,6 +124,10 @@ export const EXERCISES = [
   { id: 'mountain_climbers', name: 'Mountain climbers', pattern: 'cond', eq: [], kind: 'time', lvl: 2, cue: 'Hips low, drive knees fast. Rest 30 s between rounds.' },
   { id: 'burpees', name: 'Burpees', pattern: 'cond', eq: [], kind: 'time', lvl: 3, cue: 'Chest to floor, jump at the top. Rest 30 s between rounds.' },
 
+  // Used by the Daily Quest and the workout library
+  { id: 'situp', name: 'Sit-up', pattern: 'core', eq: [], kind: 'reps', cue: 'Feet flat, hands by your ears, curl all the way up without yanking your neck.' },
+  { id: 'run', name: 'Run', pattern: 'cardio', eq: [], kind: 'time', cue: 'Steady pace outdoors or on a treadmill. Walk breaks are fine; keep moving.' },
+
   // Active recovery: easy cardio and mobility (used on non-training days)
   { id: 'easy_cardio', name: 'Easy cardio', pattern: 'cardio', eq: [], kind: 'time', cue: 'Walk, bike or march in place at a pace where you can still hold a conversation.' },
   { id: 'worlds_greatest', name: 'World\'s greatest stretch', pattern: 'mobility', eq: [], kind: 'time', perSide: true, cue: 'Lunge forward, drop your elbow to your front instep, then rotate and reach to the ceiling.' },
@@ -197,6 +201,51 @@ export const PATTERN_STAT = {
   squat: 'str', hinge: 'str', hpush: 'str', vpush: 'str', hpull: 'str', vpull: 'str', arms: 'str',
   lunge: 'agi', cond: 'agi', core: 'end', mobility: 'vit', cardio: 'end',
 };
+
+/*
+ * The classic Daily Quest: the same four tasks for everyone, every day.
+ * Targets start from `base` (by experience) and climb to `max` at S-Rank (level 70).
+ */
+export const DAILY_QUEST = [
+  { id: 'pushups', name: 'Push-ups', unit: 'reps', base: { new: 10, some: 20, experienced: 30 }, max: 100, steps: [1, 5, 10], stat: 'str', figure: 'hpush' },
+  { id: 'situps', name: 'Sit-ups', unit: 'reps', base: { new: 10, some: 20, experienced: 30 }, max: 100, steps: [1, 5, 10], stat: 'end', figure: 'core' },
+  { id: 'squats', name: 'Squats', unit: 'reps', base: { new: 15, some: 25, experienced: 35 }, max: 100, steps: [1, 5, 10], stat: 'str', figure: 'squat' },
+  { id: 'run', name: 'Run', unit: 'km', base: { new: 1, some: 2, experienced: 3 }, max: 10, steps: [0.5, 1], stat: 'agi', figure: 'cond' },
+];
+
+export const RANK_ORDER = ['E', 'D', 'C', 'B', 'A', 'S'];
+export const WORKOUT_REWARDS = { E: [45, 8], D: [70, 12], C: [100, 18], B: [140, 25], A: [200, 35], S: [300, 50] }; // [xp, gold]
+
+/*
+ * Pre-made workouts, ranked E (easiest) to S (hardest). All bodyweight.
+ * exercises: [exerciseId, sets, target reps (or seconds for timed moves)]
+ */
+export const WORKOUT_LIBRARY = [
+  { id: 'awakening', rank: 'E', name: 'Awakening', min: 12, desc: 'Your first steps as a Player. Easy full-body basics.',
+    exercises: [['bw_squat', 3, 12], ['incline_pushup', 3, 8], ['glute_bridge', 3, 12], ['plank', 3, 20]] },
+  { id: 'hunter_basics', rank: 'E', name: 'Hunter Basics', min: 15, desc: 'The fundamentals every Hunter needs.',
+    exercises: [['pushup', 3, 8], ['bw_squat', 3, 15], ['reverse_lunge', 2, 8], ['situp', 3, 12], ['high_knees', 3, 20]] },
+  { id: 'gate_runner', rank: 'D', name: 'Gate Runner', min: 20, desc: 'Cardio to outrun anything that comes through the gate.',
+    exercises: [['high_knees', 4, 30], ['jump_squat', 3, 10], ['mountain_climbers', 4, 30], ['run', 1, 900]] },
+  { id: 'iron_core', rank: 'D', name: 'Iron Core', min: 15, desc: 'A core that doesn\'t break.',
+    exercises: [['plank', 3, 45], ['leg_raise', 3, 12], ['situp', 3, 20], ['hollow_hold', 3, 20], ['mountain_climbers', 3, 30]] },
+  { id: 'dungeon_circuit', rank: 'C', name: 'Dungeon Circuit', min: 25, desc: 'A full-body circuit. Keep rests short.',
+    exercises: [['pushup', 4, 15], ['jump_squat', 4, 12], ['situp', 4, 20], ['burpees', 4, 30], ['plank', 3, 60]] },
+  { id: 'shadow_step', rank: 'C', name: 'Shadow Step', min: 25, desc: 'Explosive legs and quick feet.',
+    exercises: [['jump_lunge', 4, 10], ['jump_squat', 4, 15], ['high_knees', 4, 40], ['burpees', 3, 40], ['sl_rdl', 3, 10]] },
+  { id: 'raid_prep', rank: 'B', name: 'Raid Prep', min: 35, desc: 'Harder push variations and single-leg strength.',
+    exercises: [['decline_pushup', 4, 15], ['split_squat', 4, 12], ['pike_pushup', 4, 10], ['diamond_pushup', 3, 12], ['hollow_hold', 3, 40]] },
+  { id: 'berserker', rank: 'B', name: 'Berserker', min: 40, desc: 'High volume. Hundreds of reps.',
+    exercises: [['pushup', 5, 20], ['bw_squat', 5, 30], ['situp', 5, 25], ['burpees', 5, 40]] },
+  { id: 'boss_rush', rank: 'A', name: 'Boss Rush', min: 45, desc: 'Advanced skills, back to back.',
+    exercises: [['archer_pushup', 4, 8], ['assisted_pistol', 4, 6], ['hspu_negative', 4, 5], ['jump_lunge', 4, 12], ['burpees', 5, 45]] },
+  { id: 'titan_protocol', rank: 'A', name: 'Titan Protocol', min: 45, desc: '100 push-ups, 150 squats, 100 sit-ups.',
+    exercises: [['pushup', 10, 10], ['bw_squat', 10, 15], ['situp', 10, 10], ['plank', 3, 90]] },
+  { id: 'heros_hundred', rank: 'S', name: 'Hero\'s Hundred', min: 90, desc: 'The legendary routine: 100 push-ups, 100 sit-ups, 100 squats and an hour-long run.',
+    exercises: [['pushup', 10, 10], ['situp', 10, 10], ['bw_squat', 10, 10], ['run', 1, 3600]] },
+  { id: 'ascension_trial', rank: 'S', name: 'Ascension Trial', min: 60, desc: 'Only the strongest finish this one.',
+    exercises: [['pistol', 5, 5], ['archer_pushup', 5, 10], ['hspu_negative', 5, 6], ['burpees', 5, 60], ['hollow_hold', 4, 60]] },
+];
 
 /*
  * Optional bonus quests (two a day). {n} is the target, scaled by experience and level.

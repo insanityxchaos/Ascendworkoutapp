@@ -5,7 +5,9 @@ A free, gamified training app for iPhone. Setup asks about your body, goal, equi
 ## Features
 
 - **Personal plan.** Pick your training days (1–6 a week), workout length, goal (lose fat, build muscle, recomp, get stronger), experience level, and equipment (bodyweight only, home gym, full gym, or any mix). Only exercises you can do with your equipment show up.
-- **Daily quests are workouts, every day.** Training days are your full workout; other days are a ~15-minute Active Recovery workout (easy cardio, core, mobility). Each exercise is its own quest ("Complete 3 sets of goblet squats") with its own XP and Gold, plus a bonus for clearing them all. Missing a day only penalizes the quests you didn't clear. Swap any exercise for another option that uses the same movement.
+- **The classic Daily Quest.** Every day, for everyone: push-ups, sit-ups, squats and a run. Goals start from your experience level and grow as you level up, reaching 100 / 100 / 100 / 10 km at S-Rank. Each goal pays XP and Gold when finished, clearing all four pays a bonus, and missing the quest costs XP (less if you cleared some goals).
+- **Workout library.** 12 pre-made bodyweight workouts ranked E to S (Awakening, Hunter Basics, Gate Runner, Iron Core, Dungeon Circuit, Shadow Step, Raid Prep, Berserker, Boss Rush, Titan Protocol, Hero's Hundred, Ascension Trial). You can take on workouts up to one rank above your own; each pays once per day.
+- **My Program.** Your personalized plan (goal, equipment, training days) as an optional workout, with automatic progression and exercise swaps.
 - **Bonus quests.** Two optional challenges a day, e.g. "Do 40 push-ups" or "Hold a plank for 2 minutes total", scaled to your level, for extra XP and Gold. No penalty for skipping.
 - **Your Player character.** An anime-style character you customize (hairstyle, hair, eye and skin color). Its outfit and aura evolve at C-Rank and A-Rank.
 - **Automatic progression.** Hit the top of the rep range on every set and the weight goes up next time. For bodyweight moves, you graduate to a harder version (incline push-up → push-up → decline → archer).
