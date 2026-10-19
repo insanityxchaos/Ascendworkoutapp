@@ -1,5 +1,5 @@
 // Network-first so updates show up right away; falls back to the cache when offline.
-const CACHE = 'ascend-v5';
+const CACHE = 'ascend-v6';
 const ASSETS = [
   './',
   './index.html',

@@ -201,6 +201,21 @@ body.no-tabs .tabbar { display: none; }
 .celebrate-avatar { width: 170px; margin: 6px auto -10px; filter: drop-shadow(0 0 20px var(--glow)); }
 .av-preview { width: 170px; height: 170px; margin: 0 auto 4px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 28%, transparent), var(--field) 70%); border: 1px solid var(--card-border); box-shadow: 0 0 22px -6px var(--glow); }
 .av-preview .avatar { margin-top: -8px; }
+.pimg {
+  display: block; object-fit: cover; object-position: 50% 12%;
+  /* Soft oval fade so the art melts into whatever is behind it. */
+  -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 45%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 50% at 50% 45%, #000 62%, transparent 100%);
+}
+.av-preview.has-img .pimg, .profile-avatar .pimg { -webkit-mask-image: none; mask-image: none; }
+.av-preview.has-img { border-radius: 20px; width: 170px; height: 204px; }
+.av-preview.has-img .pimg { margin: 0; }
+.profile-avatar .pimg { margin-top: 0; width: 72px; height: 86px; }
+.news { margin: 12px 0 4px; }
+.news-row { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.news-row:first-child { border-top: 0; }
+.news-row b { display: block; font-size: 15px; }
+.news-row span { display: block; font-size: 13px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .sw { width: 32px; height: 32px; border-radius: 50%; background: var(--c); border: 2px solid rgba(255, 255, 255, 0.15); }
 .sw.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent), 0 0 12px var(--glow); }

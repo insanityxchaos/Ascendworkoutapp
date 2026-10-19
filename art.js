@@ -312,23 +312,58 @@ function shade(hex, amt) {
   return `#${[16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('')}`;
 }
 
-const HAIR = {
-  spiky: {
-    back: 'M100 34L112 22L116 38L132 30L130 46L148 46L140 60L156 66L144 76L154 90L140 92L146 110L134 104L134 80C134 62 120 48 100 48C80 48 66 62 66 80L66 104L54 110L60 92L46 90L56 76L44 66L60 60L52 46L70 46L68 30L84 38L88 22Z',
-    front: 'M66 90C64 62 80 46 100 46C122 46 136 62 134 90L128 80L126 97L118 82L112 95L106 80L100 93L94 80L87 96L82 82L74 97L72 82Z',
-  },
-  swept: {
-    back: 'M64 106C52 80 60 42 100 36C140 36 152 76 136 106L134 82C134 62 120 48 100 48C80 48 66 62 66 82Z',
-    front: 'M66 92C62 60 82 42 104 42C126 44 140 62 134 94L129 80C123 70 113 66 105 66C97 78 86 88 70 98L76 84ZM105 66L97 92L110 72Z',
-  },
+// Hair is built from individual pointed locks, manhwa style.
+function lock(ax, ay, bx, by, tx, ty, bend = 3) {
+  const m1x = (ax + tx) / 2 - bend;
+  const m2x = (bx + tx) / 2 + bend * 0.4;
+  return `M${f1(ax)} ${f1(ay)}Q${f1(m1x)} ${f1((ay + ty) / 2)} ${f1(tx)} ${f1(ty)}Q${f1(m2x)} ${f1((by + ty) / 2)} ${f1(bx)} ${f1(by)}Z`;
+}
+
+// Front fringe locks: [baseA x,y, baseB x,y, tip x,y, bend]. Tips stop above the eyes except the centre strand.
+const FRINGE = [
+  [74, 82, 82, 72, 73, 114, 2],
+  [80, 73, 90, 68, 82, 97, 3],
+  [88, 68, 98, 66, 90.5, 94, 3],
+  [92, 67, 100, 66, 95.5, 88, 2],
+  [97, 66, 106, 66, 100.5, 105, 1.5],
+  [102, 66, 110, 67, 106, 89, -2],
+  [104, 66, 114, 68, 111.5, 94, -3],
+  [112, 68, 122, 72, 120, 97, -3],
+  [120, 72, 128, 82, 129, 114, -2],
+];
+
+// Spikes radiating from the crown, from angle `from` to `to` (degrees, 180 = left, 270 = up).
+function crownSpikes(n, rIn, rOut, from, to, curl) {
+  const cx = 101;
+  const cy = 82;
+  const rad = a => (a * Math.PI) / 180;
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const a0 = from + ((to - from) * i) / n;
+    const a1 = from + ((to - from) * (i + 1)) / n;
+    const am = (a0 + a1) / 2 + curl;
+    const len = rOut + ((i * 7) % 3) * 4;
+    d += lock(cx + rIn * Math.cos(rad(a0)), cy + rIn * Math.sin(rad(a0)), cx + rIn * Math.cos(rad(a1)), cy + rIn * Math.sin(rad(a1)),
+      cx + len * Math.cos(rad(am)), cy + len * Math.sin(rad(am)), 2);
+  }
+  return d;
+}
+
+const HAIR_CAP = 'M72 102C64 62 82 40 102 40C124 40 140 62 131 102C128 84 118 70 102 68C86 68 76 82 72 102Z';
+// Solid volume behind the head so the spikes read as one messy mass, not a crown.
+const HAIR_MASS = 'M67 110C56 70 76 34 102 33C131 33 149 68 136 110C133 90 124 72 102 70C82 70 71 88 67 110Z';
+const sideLocks = (len, spread) => lock(71, 90, 80, 88, 70 - spread, 90 + len, 2) + lock(131, 90, 122, 88, 132 + spread, 90 + len, -2);
+
+const HAIR_STYLES = {
+  spiky: { back: () => HAIR_MASS + crownSpikes(9, 36, 50, 192, 348, 22) + sideLocks(36, 2), shift: 0, scale: 1 },
+  swept: { back: () => HAIR_MASS + crownSpikes(6, 36, 48, 200, 340, 30) + sideLocks(30, 1), shift: -8, scale: 1.05 },
   long: {
-    back: 'M100 38C66 38 56 66 58 100L52 178C62 184 72 180 78 172L72 120C68 100 68 84 70 74L130 74C132 84 132 100 128 120L122 172C128 180 138 184 148 178L142 100C144 66 134 38 100 38Z',
-    front: 'M66 92C64 62 80 46 100 46C120 46 136 62 134 92L128 84L122 95L116 80L108 95L100 80L92 95L84 80L78 95L72 84ZM66 86L61 142L70 133L72 100ZM134 86L139 142L130 133L128 100Z',
+    back: () => HAIR_MASS + crownSpikes(5, 36, 46, 205, 335, 10)
+      + lock(68, 96, 78, 92, 54, 202, 6) + lock(74, 100, 84, 98, 68, 216, 4)
+      + lock(134, 96, 124, 92, 148, 202, -6) + lock(128, 100, 118, 98, 134, 216, -4),
+    shift: 0, scale: 1.08,
   },
-  short: {
-    back: 'M63 98C57 60 78 38 100 38C122 38 143 60 137 98L134 84C134 62 120 48 100 48C80 48 66 62 66 84Z',
-    front: 'M64 90C62 58 82 42 100 42C120 42 138 58 136 90L131 79L127 88L121 75L113 84L105 73L97 84L89 74L82 86L75 77L70 88Z',
-  },
+  short: { back: () => HAIR_MASS + crownSpikes(8, 36, 44, 200, 340, 10), shift: 0, scale: 0.62 },
 };
 
 /*
@@ -337,68 +372,91 @@ const HAIR = {
  */
 export function avatar(look, { size = 160, tier = 1, rankColor = '#8fb0ff', aura = true } = {}) {
   const id = uid('av');
-  const hair = HAIR[look.hair] || HAIR.spiky;
+  const style = HAIR_STYLES[look.hair] || HAIR_STYLES.spiky;
   const hc = look.hairColor;
   const skin = look.skin;
   const eye = look.eyes;
   const trim = rankColor;
-  const eyeL = 'M74 103C77 97 90 95 95 100C96 108 93 116 85 116C78 116 74 110 74 103Z';
-  const eyeR = 'M126 103C123 97 110 95 105 100C104 108 107 116 115 116C122 116 126 110 126 103Z';
+  const line = shade(hc, -0.32);
 
+  const fringe = FRINGE.map(([ax, ay, bx, by, tx, ty, bend]) => {
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const x = mx + (tx - mx) * style.scale + style.shift * ((ty - my) / 40);
+    return lock(ax, ay, bx, by, x, my + (ty - my) * style.scale, bend);
+  }).join('');
+
+  // Narrow, sharp manhwa eyes with a small glowing iris under a heavy upper lid.
+  const eyeL = 'M82 104.5C86 100.5 93 99.5 97.5 102.5C94.5 105.8 88 106.8 82 104.5Z';
+  const eyeR = 'M120 104.5C116 100.5 109 99.5 104.5 102.5C107.5 105.8 114 106.8 120 104.5Z';
   const iris = (cx, clip) => `
     <g clip-path="url(#${id}${clip})">
-      <ellipse cx="${cx}" cy="107" rx="7.2" ry="9.4" fill="url(#${id}iris)" ${tier >= 2 ? `filter="url(#${id}eg)"` : ''}/>
-      <ellipse cx="${cx}" cy="108" rx="3" ry="4.6" fill="${shade(eye, -0.45)}"/>
-      <ellipse cx="${cx + 2.4}" cy="103" rx="2.6" ry="3" fill="#fff"/>
-      <circle cx="${cx - 2.6}" cy="111.5" r="1.2" fill="#fff" opacity=".85"/>
-    </g>`;
+      <circle cx="${cx}" cy="103.6" r="3.7" fill="url(#${id}iris)"/>
+      <circle cx="${cx}" cy="103.6" r="1.5" fill="${shade(eye, -0.5)}"/>
+      <circle cx="${cx + 1.3}" cy="102.4" r=".85" fill="#fff"/>
+    </g>
+    <circle cx="${cx}" cy="103.6" r="${tier >= 2 ? 5.5 : 4.2}" fill="${eye}" opacity="${tier >= 3 ? 0.75 : tier === 2 ? 0.55 : 0.3}" filter="url(#${id}blur)"/>`;
 
-  let outfit = `<path d="M28 240C30 200 52 178 86 168L114 168C148 178 170 200 172 240Z" fill="url(#${id}cloth)"/>`;
+  let outfit = `
+    <path d="M22 240C24 204 50 184 84 176L118 176C152 184 178 204 180 240Z" fill="url(#${id}coat)" stroke="#000" stroke-opacity=".5"/>
+    <path d="M86 176L101 212L116 176Z" fill="#04050b"/>
+    <path d="M58 204C62 216 64 228 62 240M144 204C140 216 138 228 140 240M76 214C80 224 80 232 78 240M126 214C122 224 122 232 124 240" stroke="#000" stroke-opacity=".45" stroke-width="2" fill="none"/>`;
   if (tier === 1) {
     outfit += `
-      <path d="M68 172C72 152 128 152 132 172C122 186 78 186 68 172Z" fill="${shade('#1b2246', -0.08)}"/>
-      <path d="M94 180L92 206M106 180L108 206" stroke="#c9d4ff" stroke-width="2" stroke-linecap="round" opacity=".8"/>
-      <circle cx="92" cy="208" r="2.4" fill="#c9d4ff"/><circle cx="108" cy="208" r="2.4" fill="#c9d4ff"/>`;
+      <path d="M64 188C68 166 134 166 138 188C128 176 74 176 64 188Z" fill="#1b2142" stroke="#000" stroke-opacity=".4"/>
+      <path d="M101 212L101 240" stroke="#7f8bbf" stroke-width="1.2" opacity=".6"/>`;
   } else {
     outfit += `
-      <path d="M100 178L100 240" stroke="${trim}" stroke-width="1.6" opacity=".8"/>
-      <path d="M76 170L84 146L100 160L116 146L124 170L108 190L100 178L92 190Z" fill="#090c20" stroke="${trim}" stroke-width="1.4"/>
-      <path d="M52 194C64 184 76 180 86 178M148 194C136 184 124 180 114 178" stroke="${trim}" stroke-width="1.2" fill="none" opacity=".7"/>`;
+      <path d="M86 177L73 146L92 159L99 197Z" fill="#090c1e" stroke="${trim}" stroke-width="1.3"/>
+      <path d="M116 177L129 146L110 159L103 197Z" fill="#090c1e" stroke="${trim}" stroke-width="1.3"/>
+      <path d="M99 197L94 240M103 197L108 240" stroke="${trim}" stroke-width="1.1" opacity=".55"/>
+      <path d="M44 198C58 187 73 181 86 178M158 198C144 187 129 181 116 178" stroke="${trim}" stroke-width="1" fill="none" opacity=".45"/>`;
   }
   if (tier === 3) {
     outfit += `
-      <path d="M36 220C38 194 56 180 80 176L84 196C66 198 52 206 44 224Z" fill="#0c1030" stroke="${trim}" stroke-width="1.6"/>
-      <path d="M164 220C162 194 144 180 120 176L116 196C134 198 148 206 156 224Z" fill="#0c1030" stroke="${trim}" stroke-width="1.6"/>
-      <polygon points="${hexPoints(9, 100, 216)}" fill="none" stroke="${trim}" stroke-width="1.8" filter="url(#${id}eg)"/>`;
+      <path d="M28 214C32 190 54 180 79 178L81 195C60 197 45 205 38 220Z" fill="#0b0e26" stroke="${trim}" stroke-width="1.5"/>
+      <path d="M174 214C170 190 148 180 123 178L121 195C142 197 157 205 164 220Z" fill="#0b0e26" stroke="${trim}" stroke-width="1.5"/>
+      <path d="M101 214L95 222L101 230L107 222Z" fill="none" stroke="${trim}" stroke-width="1.6" filter="url(#${id}glow)"/>`;
   }
 
   return `<svg class="avatar" width="${size}" height="${Math.round(size * 1.2)}" viewBox="0 0 200 240" aria-label="Your character">
     <defs>
-      <radialGradient id="${id}aura" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${trim}" stop-opacity="${0.18 + tier * 0.1}"/><stop offset="1" stop-color="${trim}" stop-opacity="0"/></radialGradient>
-      <linearGradient id="${id}hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(hc, 0.12)}"/><stop offset="1" stop-color="${shade(hc, -0.12)}"/></linearGradient>
-      <linearGradient id="${id}skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skin}"/><stop offset="1" stop-color="${shade(skin, -0.06)}"/></linearGradient>
-      <linearGradient id="${id}iris" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(eye, -0.3)}"/><stop offset=".6" stop-color="${eye}"/><stop offset="1" stop-color="${shade(eye, 0.25)}"/></linearGradient>
-      <linearGradient id="${id}cloth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tier === 1 ? '#232b56' : '#141a3c'}"/><stop offset="1" stop-color="#080b1c"/></linearGradient>
+      <radialGradient id="${id}aura" cx=".5" cy=".55" r=".5"><stop offset="0" stop-color="${trim}" stop-opacity="${0.16 + tier * 0.1}"/><stop offset="1" stop-color="${trim}" stop-opacity="0"/></radialGradient>
+      <linearGradient id="${id}hair" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="${shade(hc, 0.14)}"/><stop offset=".55" stop-color="${hc}"/><stop offset="1" stop-color="${shade(hc, -0.14)}"/></linearGradient>
+      <linearGradient id="${id}skin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${shade(skin, -0.05)}"/><stop offset=".6" stop-color="${skin}"/><stop offset="1" stop-color="${shade(skin, 0.03)}"/></linearGradient>
+      <radialGradient id="${id}iris" cx=".5" cy=".35" r=".7"><stop offset="0" stop-color="${shade(eye, 0.35)}"/><stop offset=".6" stop-color="${eye}"/><stop offset="1" stop-color="${shade(eye, -0.3)}"/></radialGradient>
+      <linearGradient id="${id}coat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tier === 1 ? '#1d2445' : '#121630'}"/><stop offset="1" stop-color="#05060f"/></linearGradient>
       <clipPath id="${id}cl"><path d="${eyeL}"/></clipPath>
       <clipPath id="${id}cr"><path d="${eyeR}"/></clipPath>
-      <filter id="${id}eg" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="${id}blur" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.8"/></filter>
+      <filter id="${id}glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
-    ${aura ? `<circle cx="100" cy="128" r="${96 + tier * 4}" fill="url(#${id}aura)"/>` : ''}
-    ${hair.back ? `<path d="${hair.back}" fill="${shade(hc, -0.08)}"/>` : ''}
+    ${aura ? `<ellipse cx="100" cy="140" rx="${92 + tier * 6}" ry="${104 + tier * 6}" fill="url(#${id}aura)"/>` : ''}
+    ${tier === 3 ? `<g fill="${trim}" opacity=".22" filter="url(#${id}blur)"><path d="M30 240C24 206 42 192 36 168C52 186 50 204 60 214Z"/><path d="M172 240C178 206 160 192 166 168C150 186 152 204 142 214Z"/></g>` : ''}
+    <path d="${style.back()}" fill="url(#${id}hair)" stroke="${line}" stroke-width=".8" stroke-linejoin="round"/>
     ${outfit}
-    <path d="M88 130L88 166C94 171 106 171 112 166L112 130Z" fill="${shade(skin, -0.12)}"/>
-    <path d="M67 98C60 94 58 106 64 112C66 114 68 112 68 108ZM133 98C140 94 142 106 136 112C134 114 132 112 132 108Z" fill="${shade(skin, -0.05)}"/>
-    <path d="M66 92C64 66 80 50 100 50C120 50 136 66 134 92C134 112 124 132 108 143C104 146 96 146 92 143C76 132 66 112 66 92Z" fill="url(#${id}skin)"/>
-    <path d="${hair.front}" fill="url(#${id}hair)"/>
-    <path d="M80 58C90 52 110 52 122 58" fill="none" stroke="${shade(hc, 0.35)}" stroke-width="2" stroke-linecap="round" opacity=".55"/>
-    <path d="M73 92C79 88 88 88 95 92M127 92C121 88 112 88 105 92" fill="none" stroke="${shade(hc, -0.2)}" stroke-width="2.6" stroke-linecap="round" opacity=".9"/>
-    <path d="${eyeL}" fill="#fbfcff"/><path d="${eyeR}" fill="#fbfcff"/>
-    ${iris(85, 'cl')}${iris(115, 'cr')}
-    <path d="M73 103C76 95 91 93 97 100M129 103C124 95 109 93 103 100" fill="none" stroke="#17131f" stroke-width="3.6" stroke-linecap="round"/>
-    <path d="M73.5 103L70 100M126.5 103L130 100" fill="none" stroke="#17131f" stroke-width="2" stroke-linecap="round"/>
-    <path d="M80 115.5C83 116.5 88 116.5 91 115M120 115.5C117 116.5 112 116.5 109 115" fill="none" stroke="#17131f" stroke-width="1" opacity=".5"/>
-    <path d="M101 116L99 123L102 123" fill="none" stroke="${shade(skin, -0.22)}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M94 132C98 134 102 134 106 131" fill="none" stroke="${shade(skin, -0.38)}" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M92.5 138L92 175C97 180 105 180 110 175L109.5 138Z" fill="${shade(skin, -0.1)}"/>
+    <path d="M92 141C97 152 105 152 110 141L110 158C105 162 97 162 92 158Z" fill="${shade(skin, -0.3)}" opacity=".5"/>
+    <path d="M78 100C72 97 71 108 75 114C77 116 78.5 114 78.5 110ZM124 100C130 97 131 108 127 114C125 116 123.5 114 123.5 110Z" fill="${shade(skin, -0.08)}"/>
+    <path d="M77 96C77 70 88 57 101 57C114 57 125 70 125 96L124.5 111C123.5 123 118 135 110 143L104 149.5C102 151.5 100 151.5 98 149.5L92 143C84 135 78.5 123 77.5 111Z" fill="url(#${id}skin)" stroke="${shade(skin, -0.42)}" stroke-width=".7"/>
+    <path d="M83.5 112Q87 115 90.5 114.5" fill="none" stroke="${shade(skin, -0.25)}" stroke-width=".8" opacity=".6"/>
+    <path d="M77.5 100L77.5 111C78.5 123 84 135 92 143L98 149.5C94 141 89.5 129 88 117C87 109 84 102 77.5 100Z" fill="${shade(skin, -0.2)}" opacity=".45"/>
+    <path d="M78 86C88 80 114 80 124 86L124 95C114 89 88 89 78 95Z" fill="${shade(skin, -0.25)}" opacity=".35"/>
+    <path d="M125 96L124.5 111C123.5 123 118 135 110 143" fill="none" stroke="${trim}" stroke-width="1.1" opacity=".45"/>
+    <path d="M79 97.5L91 93.6L98.5 96.6L91 95.6ZM123 97.5L111 93.6L103.5 96.6L111 95.6Z" fill="${shade(hc, -0.25)}"/>
+    <path d="${eyeL}" fill="#eef0f8"/><path d="${eyeR}" fill="#eef0f8"/>
+    ${iris(90, 'cl')}${iris(112, 'cr')}
+    <path d="M80.5 104.6C85 99.8 92.5 98.8 98.2 102.4M121.5 104.6C117 99.8 109.5 98.8 103.8 102.4" fill="none" stroke="#0e0c15" stroke-width="2.3" stroke-linecap="round"/>
+    <path d="M80.5 104.6L77.5 103.4M121.5 104.6L124.5 103.4" fill="none" stroke="#0e0c15" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M84.5 106.3Q90 107.6 96 105.6M117.5 106.3Q112 107.6 106 105.6" fill="none" stroke="#0e0c15" stroke-width=".8" opacity=".35"/>
+    ${tier === 3 ? `<path d="M121 103.5L136 100" stroke="${eye}" stroke-width="1.2" stroke-linecap="round" opacity=".7" filter="url(#${id}glow)"/>` : ''}
+    <path d="M100.4 108L98.4 120.6C99.8 121.7 101.4 121.7 102.6 120.9" fill="none" stroke="${shade(skin, -0.27)}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M95.6 133.2Q100.6 132.3 106 133" fill="none" stroke="${shade(skin, -0.45)}" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M98.6 136.4Q101.2 137 103.6 136.4" fill="none" stroke="${shade(skin, -0.22)}" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+    <path d="${HAIR_CAP}" fill="url(#${id}hair)"/>
+    <path d="${fringe}" fill="url(#${id}hair)" stroke="${line}" stroke-width=".8" stroke-linejoin="round"/>
+    <path d="M86 50Q96 45.5 108 48.5M80 61Q84 56.5 90 55.5M112 55Q118 57 122.5 62M92 70Q93 78 91.5 86M108 70Q108.5 77 107 84" fill="none" stroke="${shade(hc, 0.4)}" stroke-width="1.4" stroke-linecap="round" opacity=".5"/>
+    <path d="M128 60Q138 80 131 106" fill="none" stroke="${trim}" stroke-width="1.2" opacity=".45"/>
   </svg>`;
 }
 

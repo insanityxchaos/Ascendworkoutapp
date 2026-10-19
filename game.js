@@ -6,6 +6,8 @@ import * as C from './calc.js';
 import * as P from './plan.js';
 
 export const STORE_KEY = 'ascend.v2';
+export const APP_VERSION = '3.1'; // bump with each update so players see "What's New"
+const BACKUP_EVERY_DAYS = 7;
 export const STAT_POINTS_PER_LEVEL = 3;
 export const EXTRA_DAILY_CAP = 100;   // max XP per day from extra activities
 export const DAILY_BONUS = 5;         // gold for opening the app each day
@@ -67,6 +69,9 @@ export function newState(profile) {
     measures: [],     // { date, waist, neck, hips } in cm
     side: {},         // dateKey -> bonus side quests
     sideDone: 0,
+    lastBackup: null, // dateKey of the last export
+    backupSnooze: null,
+    seenVersion: APP_VERSION,
     avatar: profile.avatar || defaultAvatar(profile.sex),
   };
 }
@@ -108,6 +113,34 @@ export function save() {
   } catch {
     notify({ type: 'toast', text: 'Could not save progress' });
   }
+}
+
+/* ---------- Backups & updates ---------- */
+
+export const needsWhatsNew = () => G.state.seenVersion !== APP_VERSION;
+
+export function markSeenVersion() {
+  G.state.seenVersion = APP_VERSION;
+  save();
+}
+
+export function backupDue() {
+  const s = G.state;
+  const today = dateKey();
+  if (s.backupSnooze && today < s.backupSnooze) return false;
+  const since = s.lastBackup || s.created;
+  return addDays(since, BACKUP_EVERY_DAYS) <= today;
+}
+
+export function markBackup() {
+  G.state.lastBackup = dateKey();
+  G.state.backupSnooze = null;
+  save();
+}
+
+export function snoozeBackup(days = 3) {
+  G.state.backupSnooze = addDays(dateKey(), days);
+  save();
 }
 
 export function start(profile) {

@@ -37,8 +37,8 @@ Go to **github.com** and click **Sign up**. Follow the steps and verify your ema
 All the app's files sit in one folder with no subfolders, so you can upload them in one go.
 
 1. On your new repository's page, above the list of files, click **Add file** → **Upload files**.
-2. Click **choose your files**. In the window that opens, go to the **Ascend app** folder on your Desktop, press **Ctrl + A** to select all 18 files, and click **Open**. (Dragging the files onto the page works too.)
-3. Wait until the list finishes loading. It should show all 18 files: `index.html`, `styles.css`, `sw.js`, `manifest.webmanifest`, `README.md`, the nine `.js` files (`app`, `art`, `calc`, `data`, `game`, `photos`, `plan`, `sound`, `util`) and four icon files.
+2. Click **choose your files**. In the window that opens, go to the **Ascend app** folder on your Desktop, press **Ctrl + A** to select all 19 files, and click **Open**. (Dragging the files onto the page works too.)
+3. Wait until the list finishes loading. It should show all 19 files: `index.html`, `styles.css`, `sw.js`, `manifest.webmanifest`, `README.md`, the nine `.js` files (`app`, `art`, `calc`, `data`, `game`, `photos`, `plan`, `sound`, `util`), four icon files and `player.jpg`.
 4. Scroll down and click the green **Commit changes** button.
 
 Check: the repository page should list **index.html** and **app.js** side by side. If you see them inside another folder, the site won't work.
@@ -57,8 +57,13 @@ Check: the repository page should list **index.html** and **app.js** side by sid
 
 Send friends the same link; they do step 5 only. Each person's data stays on their own phone. Use **Settings → Export** inside the app to back up (photos included).
 
+### Adding character art (optional)
+The default character is **`player.jpg`** in this folder (cropped from the design mockup). To change it, save a waist-up character image as `player.jpg` (or `player.png`) and upload it with the other files. Every player sees it as their character until they upload their own in **Character → Customize**. Use art you made or have the rights to; don't use official art of existing characters.
+
 ### Updating the app later
-Repeat step 3 with the changed files (GitHub replaces files with the same name), then wait a few minutes. The app picks up the new version the next time you open it with internet.
+Repeat step 3 with the changed files (GitHub replaces files with the same name), then wait a few minutes. The app picks up the new version the next time you open it with internet. Bump `APP_VERSION` in `game.js` and edit `WHATS_NEW` in `app.js` so players see what changed.
+
+**Progress is never reset by updates.** Two rules: keep the same repository name and username (the link must not change), and never delete the Home Screen icon. On iPhone that deletes the app's saved data. To get an update, just close the app and reopen it. Players get a weekly reminder to export a backup (Settings → Export Backup) as a safety net.
 
 ## Run it on your computer
 

@@ -181,7 +181,17 @@ function rankTier(level) {
   return i < 2 ? 1 : i < 4 ? 2 : 3;
 }
 
-function playerAvatar(size, look = S().avatar, level = S().level) {
+// Set at boot to the default character image (player.jpg or player.png) if the app folder has one.
+let defaultPortrait = null;
+
+// Real character art (uploaded by the player, or the default player.png) beats the drawn character.
+function portraitHtml(src, size, level) {
+  return `<img class="pimg" src="${src}" width="${size}" height="${Math.round(size * 1.2)}" alt="Your character" style="--rc:${Game.rankFor(level).color}">`;
+}
+
+function playerAvatar(size, look = S().avatar, level = S().level, portrait = S().portrait) {
+  const src = portrait || defaultPortrait;
+  if (src) return portraitHtml(src, size, level);
   return avatar(look, { size, tier: rankTier(level), rankColor: Game.rankFor(level).color });
 }
 
@@ -321,6 +331,7 @@ function draftFromState(s) {
     name: s.name, sex: s.sex, age: String(s.age), units: s.units, goal: s.goal, experience: s.experience,
     equipment: { ...s.equipment }, trainingDays: [...s.trainingDays], sessionMin: String(s.sessionMin),
     avatar: { ...s.avatar },
+    portrait: s.portrait || null,
   };
   setDraftBody(d, s.heightCm, s.weightKg);
   d.target = s.targetKg ? fmtNum(C.toDispW(d, s.targetKg), 0) : '';
@@ -334,6 +345,7 @@ function draftProfile(d) {
     equipment: { ...d.equipment }, trainingDays: [...d.trainingDays].sort(), sessionMin: +d.sessionMin,
     targetKg: +d.target > 0 ? C.fromDispW(d, +d.target) : null,
     avatar: d.avatar ? { ...d.avatar } : Game.defaultAvatar(d.sex),
+    portrait: d.portrait || null,
   };
 }
 
@@ -469,18 +481,30 @@ function avatarFields() {
   const level = S() ? S().level : 1;
   const swatches = (field, colors) => `<div class="swatches">${colors.map(c =>
     `<button class="sw${a[field] === c ? ' on' : ''}" style="--c:${c}" data-action="av-set" data-field="${field}" data-v="${c}" aria-label="${c}"></button>`).join('')}</div>`;
+  const shown = sdraft.portrait || defaultPortrait; // an image beats the drawn character
   return `
-    <div class="av-preview">${avatar(a, { size: 170, tier: rankTier(level), rankColor: Game.rankFor(level).color })}</div>
-    <div class="field"><span>Hair style</span><div class="seg">${AVATAR_OPTIONS.hair.map(([v, label]) =>
-      `<button class="${a.hair === v ? 'on' : ''}" data-action="av-set" data-field="hair" data-v="${v}">${label}</button>`).join('')}</div></div>
-    <div class="field"><span>Hair color</span>${swatches('hairColor', AVATAR_OPTIONS.hairColor)}</div>
-    <div class="field"><span>Eye color</span>${swatches('eyes', AVATAR_OPTIONS.eyes)}</div>
-    <div class="field"><span>Skin tone</span>${swatches('skin', AVATAR_OPTIONS.skin)}</div>
-    <p class="hint">Your outfit and aura upgrade as you rank up: a jacket at C-Rank, armored coat at A-Rank.</p>`;
+    <div class="av-preview${shown ? ' has-img' : ''}">${shown
+      ? portraitHtml(shown, 170, level)
+      : avatar(a, { size: 170, tier: rankTier(level), rankColor: Game.rankFor(level).color })}</div>
+    <div class="field"><span>Character artwork</span>
+      <div class="row">
+        <button class="btn ghost" data-action="portrait-pick">${icon('camera', 16)} ${sdraft.portrait ? 'Change Image' : 'Upload Your Own'}</button>
+        ${sdraft.portrait ? '<button class="btn ghost" data-action="portrait-clear">Remove</button>' : ''}
+      </div>
+      <input type="file" id="portrait-file" accept="image/*" hidden>
+      <p class="hint">${!sdraft.portrait && defaultPortrait ? 'You\'re using the default character. ' : ''}Upload a character image you made or have the rights to (for example from an AI image app) to use your own. A waist-up portrait on a dark background works best.</p>
+    </div>
+    ${shown ? '' : `
+      <div class="field"><span>Hair style</span><div class="seg">${AVATAR_OPTIONS.hair.map(([v, label]) =>
+        `<button class="${a.hair === v ? 'on' : ''}" data-action="av-set" data-field="hair" data-v="${v}">${label}</button>`).join('')}</div></div>
+      <div class="field"><span>Hair color</span>${swatches('hairColor', AVATAR_OPTIONS.hairColor)}</div>
+      <div class="field"><span>Eye color</span>${swatches('eyes', AVATAR_OPTIONS.eyes)}</div>
+      <div class="field"><span>Skin tone</span>${swatches('skin', AVATAR_OPTIONS.skin)}</div>
+      <p class="hint">Your outfit and aura upgrade as you rank up: a jacket at C-Rank, armored coat at A-Rank.</p>`}`;
 }
 
 function openAvatarEditor() {
-  sdraft = { sex: S().sex, avatar: { ...S().avatar } };
+  sdraft = { sex: S().sex, avatar: { ...S().avatar }, portrait: S().portrait || null };
   queueModal(() => `
     <h2 class="modal-title">Your Character</h2>
     ${avatarFields()}
@@ -920,7 +944,7 @@ function statsScreen() {
         <div><b class="lv-big">${esc(s.name)} · Lv. ${s.level}</b><span class="muted small">${esc(Game.titleFor())} · ${next ? `${next.rank}-Rank at Lv. ${next.min}` : 'Max rank'}</span></div>
         ${emblem(r.rank, r.color, { size: 54 })}
       </div>
-      <p class="hint" style="margin-top:4px">Your outfit and aura evolve at C-Rank and A-Rank.</p>
+      ${s.portrait || defaultPortrait ? '' : '<p class="hint" style="margin-top:4px">Your outfit and aura evolve at C-Rank and A-Rank.</p>'}
       <div class="xpbar"><i style="width:${Math.min(100, (s.xp / need) * 100)}%"></i></div>
       <div class="row-between small muted"><span>${s.totalXp.toLocaleString()} total XP</span><span>${s.xp} / ${need} XP</span></div>
     </section>
@@ -1417,7 +1441,7 @@ function settingsScreen() {
       <p class="hint">Unlock more themes and titles in the Rewards shop.</p>
     </section>
     <section class="card menu">
-      ${row('data', 'Export Backup', 'Saves your progress and photos to a file', 'export')}
+      ${row('data', 'Export Backup', `Saves progress and photos to a file · ${s.lastBackup ? `last ${prettyDate(s.lastBackup, { month: 'short', day: 'numeric' })}` : 'never backed up'}`, 'export')}
       ${row('data', 'Import Backup', 'Restore from a backup file', 'import')}
       ${row('info', 'Reset All Progress', 'Deletes everything on this phone', 'reset', '')}
       <input type="file" id="import-file" accept="application/json,.json" hidden>
@@ -1494,6 +1518,7 @@ async function exportData() {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: 'Ascend backup' });
+      backupDone();
       return;
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -1506,6 +1531,43 @@ async function exportData() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  backupDone();
+}
+
+function backupDone() {
+  Game.markBackup();
+  toast('Backup saved. Keep it in Files or iCloud Drive.');
+  render();
+}
+
+const WHATS_NEW = [
+  ['quest', 'Every day is a workout', 'Off days are now a short Active Recovery workout instead of a checklist.'],
+  ['target', 'Mini quests', 'Each exercise is its own quest with its own XP and Gold, plus a bonus for clearing them all.'],
+  ['star', 'Bonus quests', 'Two optional daily challenges for extra rewards. No penalty for skipping.'],
+  ['user', 'Your character', 'A new anime-style Player character. Want your own look? Upload your own art in Character → Customize.'],
+  ['data', 'Backup reminders', 'A weekly nudge to save your progress to Files or iCloud Drive.'],
+];
+
+function whatsNewHtml() {
+  return `
+    <p class="eyebrow glow center">[ System Update ]</p>
+    <h2 class="modal-title">What's New in ${Game.APP_VERSION}</h2>
+    <div class="news">${WHATS_NEW.map(([ic, title, text]) => `
+      <div class="news-row"><span class="menu-ic">${icon(ic, 18)}</span><div><b>${title}</b><span>${text}</span></div></div>`).join('')}</div>
+    <p class="hint center">Updates never reset your progress. Just don't delete the app icon from your Home Screen, since that erases its saved data.</p>
+    <button class="btn" data-action="close">Continue</button>`;
+}
+
+function backupHtml() {
+  const s = S();
+  return `
+    <div class="center">${badge('data', { size: 72 })}</div>
+    <h2 class="modal-title">Protect Your Progress</h2>
+    <p class="sub">Level ${s.level} · ${plural(Game.computeStreak(), 'day')} streak · ${s.gold.toLocaleString()} Gold</p>
+    <p class="sub">Your progress is saved only on this phone. Save a backup file to Files or iCloud Drive so a lost phone or a deleted icon can't wipe it out.</p>
+    <p class="hint center">${s.lastBackup ? `Last backup: ${prettyDate(s.lastBackup)}` : 'You haven\'t made a backup yet.'}</p>
+    <button class="btn" data-action="backup-now">Back Up Now</button>
+    <button class="btn ghost" data-action="backup-later">Remind Me Later</button>`;
 }
 
 function importData(file) {
@@ -1897,7 +1959,18 @@ document.addEventListener('click', e => {
       sdraft.avatar = { ...sdraft.avatar, [field]: v };
       refreshForm();
       break;
-    case 'save-avatar': S().avatar = { ...sdraft.avatar }; Game.save(); nextModal(); render(); toast('Character updated'); break;
+    case 'save-avatar':
+      S().avatar = { ...sdraft.avatar };
+      S().portrait = sdraft.portrait || null;
+      Game.save();
+      nextModal();
+      render();
+      toast('Character updated');
+      break;
+    case 'portrait-pick': $('#portrait-file').click(); break;
+    case 'portrait-clear': sdraft.portrait = null; refreshForm(); break;
+    case 'backup-now': nextModal(); exportData(); break;
+    case 'backup-later': Game.snoozeBackup(3); nextModal(); break;
     case 'side-step': Game.sideStep(Number(v), Number(el.dataset.dir)); sfx('tap'); render(); pump(); break;
     case 'side-done': Game.sideFinish(Number(v)); render(); pump(); break;
     case 'toggle-sound': S().sound = !S().sound; setSoundEnabled(S().sound); Game.save(); sfx('tap'); render(); break;
@@ -1945,6 +2018,11 @@ document.addEventListener('change', e => {
   if (!file) return;
   if (e.target.id === 'import-file') importData(file);
   if (e.target.id === 'photo-file') savePhoto(file);
+  if (e.target.id === 'portrait-file') {
+    Photos.resizeImage(file, 720, 0.85)
+      .then(data => { sdraft.portrait = data; refreshForm(); })
+      .catch(err => toast(err.message || 'Could not read that image'));
+  }
 });
 
 // Timers: rest/exercise countdowns, the midnight countdown, and rolling over to a new day.
@@ -1978,6 +2056,26 @@ if (S()) {
 applyTheme();
 render();
 pump();
+if (S()) {
+  if (Game.needsWhatsNew()) {
+    queueModal(whatsNewHtml(), '', 'unlock');
+    Game.markSeenVersion();
+  }
+  if (Game.backupDue()) queueModal(backupHtml);
+}
+
+(async () => {
+  for (const name of ['player.jpg', 'player.png']) {
+    try {
+      const r = await fetch(name); // a normal GET so the service worker caches it for offline use
+      if (r.ok && (r.headers.get('content-type') || '').startsWith('image')) {
+        defaultPortrait = name;
+        if (S()) render();
+        return;
+      }
+    } catch { /* offline or missing */ }
+  }
+})();
 
 Photos.allPhotos()
   .then(list => {
