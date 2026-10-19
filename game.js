@@ -1,7 +1,7 @@
 /* Game state and rules: XP, gold, levels, quests, penalties, attributes, achievements, shop. No UI here. */
 
 import { dateKey, addDays, parseKey } from './util.js';
-import { RANKS, PATTERN_STAT, SHOP, THEMES, TITLES } from './data.js';
+import { RANKS, PATTERN_STAT, SHOP, THEMES, TITLES, SIDE_QUESTS } from './data.js';
 import * as C from './calc.js';
 import * as P from './plan.js';
 
@@ -65,7 +65,14 @@ export function newState(profile) {
     tests: {},        // 'pushup' | 'pullup' -> { reps, date }
     weights: [{ date: today, kg: profile.weightKg }],
     measures: [],     // { date, waist, neck, hips } in cm
+    side: {},         // dateKey -> bonus side quests
+    sideDone: 0,
+    avatar: profile.avatar || defaultAvatar(profile.sex),
   };
+}
+
+export function defaultAvatar(sex) {
+  return { hair: sex === 'female' ? 'long' : 'spiky', hairColor: '#14151f', eyes: '#2d6bff', skin: '#f2c9a5' };
 }
 
 export function isValidState(s) {
@@ -220,12 +227,17 @@ export function computeStreak() {
 export function todayQuest() {
   const s = G.state;
   const k = dateKey();
-  if (!s.quests[k]) {
+  const q = s.quests[k];
+  // Old checklist-style rest days (or a fresh day) get a real workout.
+  if (!q || (q.type === 'recovery' && !q.complete && !P.questStarted(q))) {
     s.quests[k] = P.buildQuest(s, k);
     save();
   }
-  return s.quests[k];
+  return P.splitRewards(s.quests[k]);
 }
+
+export const isLight = q => q.type === 'recovery' || !!q.light;
+export const miniCleared = q => (q.type === 'workout' ? q.exercises.filter(e => e.done.every(Boolean)).length : 0);
 
 export function rebuildTodayQuest() {
   const s = G.state;
@@ -255,21 +267,34 @@ function finishQuestIfDone(q, k) {
   const add = (key, n) => { if (n) gains[key] = (gains[key] || 0) + n; };
   if (q.type === 'workout') {
     for (const e of q.exercises) add(PATTERN_STAT[e.pattern] || 'str', trainStat(PATTERN_STAT[e.pattern] || 'str', e.done.length, k));
-    add('end', trainStat('end', 3, k));
+    add(q.light ? 'vit' : 'end', trainStat(q.light ? 'vit' : 'end', 3, k));
   } else {
     add('vit', trainStat('vit', 7, k));
   }
-  const xp = Math.round(q.reward * (boostActive() ? 1.5 : 1));
-  const gold = grantGold(questGold(q));
-  q.xpEarned = xp;
-  q.goldEarned = gold;
+  // Mini quests already paid their share; this is the clear bonus.
+  const baseXp = q.type === 'workout' ? q.bonusXp : q.reward;
+  const xp = Math.round(baseXp * (boostActive() ? 1.5 : 1));
+  const gold = grantGold(q.type === 'workout' ? q.bonusGold : questGold(q));
+  q.xpEarned = (q.xpEarned || 0) + xp;
+  q.goldEarned = (q.goldEarned || 0) + gold;
   const streak = computeStreak();
   s.bestStreak = Math.max(s.bestStreak, streak);
   const bonus = streak > 0 && streak % 7 === 0 ? 1 : 0;
   s.statPoints += bonus;
-  notify({ type: 'quest', q, xp, gold, streak, bonus, notes, gains });
+  notify({ type: 'quest', q, xp, gold, totalXp: q.xpEarned, totalGold: q.goldEarned, streak, bonus, notes, gains });
   grantXp(xp, k, false);
   checkAchievements();
+}
+
+// Pays out a mini quest the first time all of an exercise's sets are logged.
+function clearMini(q, e, k) {
+  if (e.cleared || !e.done.every(Boolean)) return;
+  e.cleared = true;
+  const xp = grantXp(e.xp || 0, k);
+  const gold = grantGold(e.gold || 0);
+  q.xpEarned = (q.xpEarned || 0) + xp;
+  q.goldEarned = (q.goldEarned || 0) + gold;
+  if (miniCleared(q) < q.exercises.length) notify({ type: 'mini', id: e.id, xp, gold, n: miniCleared(q), total: q.exercises.length });
 }
 
 function openEntry(i) {
@@ -284,7 +309,9 @@ export function completeSet(i, reps) {
   const j = e.done.findIndex(d => !d);
   if (j < 0) return -1;
   e.done[j] = { r: reps ?? e.cur, w: e.w };
-  finishQuestIfDone(todayQuest(), dateKey());
+  const q = todayQuest();
+  clearMini(q, e, dateKey());
+  finishQuestIfDone(q, dateKey());
   save();
   return j;
 }
@@ -293,14 +320,17 @@ export function toggleSet(i, j) {
   const e = openEntry(i);
   if (!e) return;
   e.done[j] = e.done[j] ? null : { r: e.cur, w: e.w };
-  finishQuestIfDone(todayQuest(), dateKey());
+  const q = todayQuest();
+  clearMini(q, e, dateKey());
+  finishQuestIfDone(q, dateKey());
   save();
 }
 
 export function adjustCurrent(i, dir) {
   const e = openEntry(i);
   if (!e) return;
-  e.cur = Math.max(0, Math.min(999, e.cur + dir * (P.exById(e.id).kind === 'time' ? 5 : 1)));
+  const step = P.exById(e.id).kind === 'time' ? (e.hi >= 120 ? 60 : 5) : 1;
+  e.cur = Math.max(0, Math.min(3600, e.cur + dir * step));
   save();
 }
 
@@ -353,7 +383,9 @@ export function processMissedDays() {
         continue;
       }
       const q = s.quests[k] || P.buildQuest(s, k);
-      const lost = loseXp(Math.round(q.reward * 0.5), k);
+      // Partial credit: the penalty shrinks with every mini quest you did clear.
+      const share = q.type === 'workout' && q.exercises.length ? 1 - miniCleared(q) / q.exercises.length : 1;
+      const lost = loseXp(Math.round(q.reward * 0.5 * share), k);
       total += lost;
       if (lost) s.penalties.push({ date: k, xp: lost });
     }
@@ -403,7 +435,7 @@ export function periodStats(days) {
     for (let k = from; k <= to; k = addDays(k, 1)) {
       xp += Math.max(0, s.xpByDay[k] || 0);
       const q = s.quests[k];
-      if (q && q.complete && q.type === 'workout') workouts++;
+      if (q && q.complete && !isLight(q)) workouts++;
     }
     return { xp, workouts };
   };
@@ -483,7 +515,9 @@ export const ACHIEVEMENTS = [
   { id: 'workouts_50', name: 'Beast Mode', desc: 'Complete 50 workouts', xp: 1000, gold: 200, icon: 'bolt', test: c => c.workouts >= 50 },
   { id: 'workouts_100', name: 'Centurion', desc: 'Complete 100 workouts', xp: 2000, gold: 500, icon: 'trophy', test: c => c.workouts >= 100 },
   { id: 'sets_250', name: 'Grinder', desc: 'Log 250 sets', xp: 400, gold: 80, icon: 'target', test: c => c.sets >= 250 },
-  { id: 'recovery_10', name: 'Recharged', desc: 'Clear 10 recovery quests', xp: 150, gold: 40, icon: 'moon', test: c => c.recovery >= 10 },
+  { id: 'recovery_10', name: 'Recharged', desc: 'Clear 10 active recovery days', xp: 150, gold: 40, icon: 'moon', test: c => c.recovery >= 10 },
+  { id: 'side_10', name: 'Side Hustle', desc: 'Complete 10 bonus quests', xp: 200, gold: 50, icon: 'target', test: c => c.sides >= 10 },
+  { id: 'side_50', name: 'Overachiever', desc: 'Complete 50 bonus quests', xp: 800, gold: 200, icon: 'target', test: c => c.sides >= 50 },
   { id: 'photo', name: 'Mirror Check', desc: 'Take your first progress photo', xp: 50, gold: 15, icon: 'camera', test: c => c.photos >= 1 },
   { id: 'measure', name: 'Know Thyself', desc: 'Log your body measurements', xp: 50, gold: 15, icon: 'tape', test: c => c.measures >= 1 },
   { id: 'goal', name: 'Goal Crusher', desc: 'Reach your goal weight', xp: 1000, gold: 300, icon: 'trophy', test: c => c.goalReached },
@@ -497,7 +531,7 @@ export const ACHIEVEMENTS = [
 function achievementContext() {
   const s = G.state;
   const cleared = Object.values(s.quests).filter(q => q.complete);
-  const workouts = cleared.filter(q => q.type === 'workout');
+  const workouts = cleared.filter(q => !isLight(q));
   const hours = workouts.map(q => (q.completedAt ? new Date(q.completedAt).getHours() : 12));
   const target = C.targetKg(s);
   return {
@@ -515,6 +549,7 @@ function achievementContext() {
     goalReached: !!s.targetKg && s.weights.length > 1
       && ((s.goal === 'fatloss' && s.weightKg <= target) || (s.goal === 'muscle' && s.weightKg >= target)),
     maxStat: Math.max(...Object.values(s.stats)),
+    sides: s.sideDone || 0,
   };
 }
 
@@ -532,6 +567,70 @@ export function checkAchievements() {
   }
   checkAchievements(); // XP from these may unlock level achievements
   save();
+}
+
+/* ================= Bonus side quests ================= */
+
+export const sideDef = id => SIDE_QUESTS.find(x => x.id === id);
+
+function hashKey(k) {
+  let h = 2166136261;
+  for (const ch of k) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+
+function buildSide(s, k) {
+  const pool = SIDE_QUESTS.filter(q => !q.eq || s.equipment[q.eq]);
+  const h = hashKey(k);
+  const first = h % pool.length;
+  let second = (first + 1 + ((h >>> 8) % (pool.length - 1))) % pool.length;
+  if (second === first) second = (first + 1) % pool.length;
+  const mult = { new: 1, some: 1.6, experienced: 2.3 }[s.experience] * (1 + (s.level - 1) * 0.02);
+  return [pool[first], pool[second]].map(d => {
+    const target = Math.max(d.step, Math.min(d.cap || Infinity, Math.round((d.base * mult) / d.step) * d.step));
+    return { id: d.id, target, progress: 0, done: false, xp: 25 + s.level * 2, gold: 8 };
+  });
+}
+
+export function todaySide() {
+  const s = G.state;
+  const k = dateKey();
+  s.side = s.side || {};
+  if (!s.side[k]) {
+    s.side[k] = buildSide(s, k);
+    const cutoff = addDays(k, -14);
+    for (const key of Object.keys(s.side)) if (key < cutoff) delete s.side[key];
+    save();
+  }
+  return s.side[k];
+}
+
+export function sideStep(i, dir) {
+  const q = todaySide()[i];
+  if (!q || q.done) return;
+  q.progress = Math.max(0, q.progress + dir * sideDef(q.id).step);
+  if (q.progress >= q.target) completeSide(q);
+  save();
+}
+
+export function sideFinish(i) {
+  const q = todaySide()[i];
+  if (!q || q.done) return;
+  q.progress = q.target;
+  completeSide(q);
+  save();
+}
+
+function completeSide(q) {
+  const s = G.state;
+  q.done = true;
+  const d = sideDef(q.id);
+  const xp = grantXp(q.xp);
+  const gold = grantGold(q.gold);
+  trainStat(d.stat, 4);
+  s.sideDone = (s.sideDone || 0) + 1;
+  notify({ type: 'side', text: d.text.replace('{n}', q.target), xp, gold });
+  checkAchievements();
 }
 
 /* ================= Shop & rewards ================= */

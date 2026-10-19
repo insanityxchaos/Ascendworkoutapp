@@ -32,6 +32,7 @@ export const EXPERIENCE = {
 export const PATTERNS = {
   squat: 'Squat', hinge: 'Hinge', lunge: 'Single-leg', hpush: 'Push', vpush: 'Overhead push',
   hpull: 'Row', vpull: 'Pull-up / pulldown', core: 'Core', arms: 'Arms', cond: 'Conditioning',
+  mobility: 'Mobility', cardio: 'Easy cardio',
 };
 
 export const LOWER_BODY = new Set(['squat', 'hinge', 'lunge']);
@@ -122,6 +123,16 @@ export const EXERCISES = [
   { id: 'high_knees', name: 'High knees', pattern: 'cond', eq: [], kind: 'time', lvl: 1, cue: 'Fast feet, knees to hip height. Rest 30 s between rounds.' },
   { id: 'mountain_climbers', name: 'Mountain climbers', pattern: 'cond', eq: [], kind: 'time', lvl: 2, cue: 'Hips low, drive knees fast. Rest 30 s between rounds.' },
   { id: 'burpees', name: 'Burpees', pattern: 'cond', eq: [], kind: 'time', lvl: 3, cue: 'Chest to floor, jump at the top. Rest 30 s between rounds.' },
+
+  // Active recovery: easy cardio and mobility (used on non-training days)
+  { id: 'easy_cardio', name: 'Easy cardio', pattern: 'cardio', eq: [], kind: 'time', cue: 'Walk, bike or march in place at a pace where you can still hold a conversation.' },
+  { id: 'worlds_greatest', name: 'World\'s greatest stretch', pattern: 'mobility', eq: [], kind: 'time', perSide: true, cue: 'Lunge forward, drop your elbow to your front instep, then rotate and reach to the ceiling.' },
+  { id: 'deep_squat_hold', name: 'Deep squat hold', pattern: 'mobility', eq: [], kind: 'time', cue: 'Sit in the bottom of a squat, heels down, chest up. Hold a door frame if you need to.' },
+  { id: 'cat_cow', name: 'Cat-cow', pattern: 'mobility', eq: [], kind: 'reps', cue: 'On all fours, slowly round then arch your back with each breath.' },
+  { id: 'open_book', name: 'Open book rotation', pattern: 'mobility', eq: [], kind: 'reps', perSide: true, cue: 'Lie on your side, knees bent, and rotate your top arm open to the floor behind you.' },
+  { id: 'hip_flexor', name: 'Kneeling hip flexor stretch', pattern: 'mobility', eq: [], kind: 'time', perSide: true, cue: 'Half-kneel, squeeze the back glute and shift your hips forward.' },
+  { id: 'childs_pose', name: 'Child\'s pose', pattern: 'mobility', eq: [], kind: 'time', cue: 'Sit back on your heels, arms long in front, and breathe slowly into your back.' },
+  { id: 'leg_swings', name: 'Leg swings', pattern: 'mobility', eq: [], kind: 'reps', perSide: true, cue: 'Hold a wall and swing one leg forward and back, then side to side.' },
 ];
 
 export const TEMPLATES = {
@@ -132,6 +143,7 @@ export const TEMPLATES = {
   upperB: { name: 'Upper Body B', v: 1, slots: ['vpush', 'vpull', 'hpush', 'hpull', 'arms', 'core'] },
   lowerA: { name: 'Lower Body A', v: 0, slots: ['squat', 'hinge', 'lunge', 'core', 'cond'] },
   lowerB: { name: 'Lower Body B', v: 1, slots: ['hinge', 'squat', 'lunge', 'core', 'cond'] },
+  recovery: { name: 'Active Recovery', v: 0, slots: [] }, // built by plan.buildRecoveryWorkout
 };
 
 // Number of training days -> workout for each training day, in week order.
@@ -183,7 +195,34 @@ export const STATS = [
 // Which attribute a movement trains. Every logged set adds attribute XP.
 export const PATTERN_STAT = {
   squat: 'str', hinge: 'str', hpush: 'str', vpush: 'str', hpull: 'str', vpull: 'str', arms: 'str',
-  lunge: 'agi', cond: 'agi', core: 'end',
+  lunge: 'agi', cond: 'agi', core: 'end', mobility: 'vit', cardio: 'end',
+};
+
+/*
+ * Optional bonus quests (two a day). {n} is the target, scaled by experience and level.
+ * step is how much each tap adds; eq limits a quest to people with that equipment.
+ */
+export const SIDE_QUESTS = [
+  { id: 'pushups', text: 'Do {n} push-ups', base: 25, step: 5, unit: 'reps', stat: 'str' },
+  { id: 'squats', text: 'Do {n} bodyweight squats', base: 40, step: 5, unit: 'reps', stat: 'str' },
+  { id: 'situps', text: 'Do {n} sit-ups or crunches', base: 30, step: 5, unit: 'reps', stat: 'end' },
+  { id: 'lunges', text: 'Do {n} lunges per leg', base: 15, step: 5, unit: 'reps', stat: 'agi' },
+  { id: 'burpees', text: 'Do {n} burpees', base: 15, step: 5, unit: 'reps', stat: 'agi' },
+  { id: 'jacks', text: 'Do {n} jumping jacks', base: 60, step: 10, unit: 'reps', stat: 'agi' },
+  { id: 'plank', text: 'Hold a plank for {n} seconds total', base: 90, step: 15, unit: 's', stat: 'end' },
+  { id: 'cardio', text: 'Get {n} minutes of cardio', base: 20, step: 5, unit: 'min', stat: 'end', cap: 60 },
+  { id: 'stretch', text: 'Stretch for {n} minutes', base: 10, step: 5, unit: 'min', stat: 'vit', cap: 20 },
+  { id: 'pullups', text: 'Do {n} pull-ups or chin-ups', base: 8, step: 2, unit: 'reps', stat: 'str', eq: 'bar' },
+  { id: 'hang', text: 'Dead hang for {n} seconds total', base: 60, step: 15, unit: 's', stat: 'str', eq: 'bar' },
+];
+
+/* ---------- Player character (avatar) ---------- */
+
+export const AVATAR_OPTIONS = {
+  hair: [['spiky', 'Spiky'], ['swept', 'Swept'], ['long', 'Long'], ['short', 'Short']],
+  hairColor: ['#14151f', '#3b2a20', '#7a4a26', '#e8c36a', '#e9eef7', '#9aa6c4', '#3d6bff', '#c0304a', '#7b4dff'],
+  eyes: ['#3a2a1e', '#2d6bff', '#2fa86b', '#8a5cff', '#d8a13a', '#c43050'],
+  skin: ['#fde3cf', '#f2c9a5', '#d9a47c', '#a86f4c', '#6e4630'],
 };
 
 // Highest first so RANKS.find() returns the current rank.

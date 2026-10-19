@@ -137,6 +137,8 @@ const FIGURES = {
   vpull: { head: [60, 16], lines: [[30, 5, 90, 5], [60, 23, 60, 46], [60, 46, 56, 66], [60, 46, 64, 66], [58, 25, 50, 16, 50, 5], [62, 25, 70, 16, 70, 5]] },
   arms: { head: [60, 13], lines: [[60, 19, 60, 45], [60, 45, 55, 68], [60, 45, 65, 68], [60, 23, 67, 37, 74, 27], [60, 23, 53, 37, 53, 48]], extra: [[75, 25, 4]], floor: 69 },
   cond: { head: [64, 11], lines: [[64, 17, 57, 38], [57, 38, 71, 48, 67, 63], [57, 38, 46, 50, 33, 49], [62, 23, 74, 29, 80, 21], [62, 23, 51, 29, 45, 38]], floor: 65 },
+  mobility: { head: [52, 12], lines: [[52, 18, 48, 40], [48, 40, 66, 50, 66, 67], [48, 40, 34, 56, 20, 64], [51, 23, 64, 8], [51, 23, 44, 38]], floor: 68 },
+  cardio: { head: [60, 11], lines: [[60, 17, 58, 41], [58, 41, 66, 54, 70, 67], [58, 41, 52, 55, 46, 66], [60, 23, 67, 34], [60, 23, 53, 34]], floor: 68 },
   stand: { head: [60, 12], lines: [[60, 18, 60, 44], [60, 44, 54, 68], [60, 44, 66, 68], [60, 22, 52, 38], [60, 22, 68, 38]], floor: 69 },
 };
 
@@ -300,6 +302,104 @@ export function scene({ seed = 7, w = 400, h = 220, moon = true, island: hasIsla
 // Just the stick figure, for small cards.
 export function figure(name, size = 64) {
   return `<svg class="mini-figure" width="${size}" height="${Math.round(size * 0.6)}" viewBox="0 0 120 72" aria-hidden="true">${figureSvg(name, 0, 0, 1)}</svg>`;
+}
+
+/* ---------- Player character (anime-style bust, 200×240) ---------- */
+
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = s => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) + 255 * amt)));
+  return `#${[16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('')}`;
+}
+
+const HAIR = {
+  spiky: {
+    back: 'M100 34L112 22L116 38L132 30L130 46L148 46L140 60L156 66L144 76L154 90L140 92L146 110L134 104L134 80C134 62 120 48 100 48C80 48 66 62 66 80L66 104L54 110L60 92L46 90L56 76L44 66L60 60L52 46L70 46L68 30L84 38L88 22Z',
+    front: 'M66 90C64 62 80 46 100 46C122 46 136 62 134 90L128 80L126 97L118 82L112 95L106 80L100 93L94 80L87 96L82 82L74 97L72 82Z',
+  },
+  swept: {
+    back: 'M64 106C52 80 60 42 100 36C140 36 152 76 136 106L134 82C134 62 120 48 100 48C80 48 66 62 66 82Z',
+    front: 'M66 92C62 60 82 42 104 42C126 44 140 62 134 94L129 80C123 70 113 66 105 66C97 78 86 88 70 98L76 84ZM105 66L97 92L110 72Z',
+  },
+  long: {
+    back: 'M100 38C66 38 56 66 58 100L52 178C62 184 72 180 78 172L72 120C68 100 68 84 70 74L130 74C132 84 132 100 128 120L122 172C128 180 138 184 148 178L142 100C144 66 134 38 100 38Z',
+    front: 'M66 92C64 62 80 46 100 46C120 46 136 62 134 92L128 84L122 95L116 80L108 95L100 80L92 95L84 80L78 95L72 84ZM66 86L61 142L70 133L72 100ZM134 86L139 142L130 133L128 100Z',
+  },
+  short: {
+    back: 'M63 98C57 60 78 38 100 38C122 38 143 60 137 98L134 84C134 62 120 48 100 48C80 48 66 62 66 84Z',
+    front: 'M64 90C62 58 82 42 100 42C120 42 138 58 136 90L131 79L127 88L121 75L113 84L105 73L97 84L89 74L82 86L75 77L70 88Z',
+  },
+};
+
+/*
+ * The player's character. look: { hair, hairColor, eyes, skin }. tier 1–3 upgrades the outfit;
+ * rankColor tints trims, eye glow and aura.
+ */
+export function avatar(look, { size = 160, tier = 1, rankColor = '#8fb0ff', aura = true } = {}) {
+  const id = uid('av');
+  const hair = HAIR[look.hair] || HAIR.spiky;
+  const hc = look.hairColor;
+  const skin = look.skin;
+  const eye = look.eyes;
+  const trim = rankColor;
+  const eyeL = 'M74 103C77 97 90 95 95 100C96 108 93 116 85 116C78 116 74 110 74 103Z';
+  const eyeR = 'M126 103C123 97 110 95 105 100C104 108 107 116 115 116C122 116 126 110 126 103Z';
+
+  const iris = (cx, clip) => `
+    <g clip-path="url(#${id}${clip})">
+      <ellipse cx="${cx}" cy="107" rx="7.2" ry="9.4" fill="url(#${id}iris)" ${tier >= 2 ? `filter="url(#${id}eg)"` : ''}/>
+      <ellipse cx="${cx}" cy="108" rx="3" ry="4.6" fill="${shade(eye, -0.45)}"/>
+      <ellipse cx="${cx + 2.4}" cy="103" rx="2.6" ry="3" fill="#fff"/>
+      <circle cx="${cx - 2.6}" cy="111.5" r="1.2" fill="#fff" opacity=".85"/>
+    </g>`;
+
+  let outfit = `<path d="M28 240C30 200 52 178 86 168L114 168C148 178 170 200 172 240Z" fill="url(#${id}cloth)"/>`;
+  if (tier === 1) {
+    outfit += `
+      <path d="M68 172C72 152 128 152 132 172C122 186 78 186 68 172Z" fill="${shade('#1b2246', -0.08)}"/>
+      <path d="M94 180L92 206M106 180L108 206" stroke="#c9d4ff" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+      <circle cx="92" cy="208" r="2.4" fill="#c9d4ff"/><circle cx="108" cy="208" r="2.4" fill="#c9d4ff"/>`;
+  } else {
+    outfit += `
+      <path d="M100 178L100 240" stroke="${trim}" stroke-width="1.6" opacity=".8"/>
+      <path d="M76 170L84 146L100 160L116 146L124 170L108 190L100 178L92 190Z" fill="#090c20" stroke="${trim}" stroke-width="1.4"/>
+      <path d="M52 194C64 184 76 180 86 178M148 194C136 184 124 180 114 178" stroke="${trim}" stroke-width="1.2" fill="none" opacity=".7"/>`;
+  }
+  if (tier === 3) {
+    outfit += `
+      <path d="M36 220C38 194 56 180 80 176L84 196C66 198 52 206 44 224Z" fill="#0c1030" stroke="${trim}" stroke-width="1.6"/>
+      <path d="M164 220C162 194 144 180 120 176L116 196C134 198 148 206 156 224Z" fill="#0c1030" stroke="${trim}" stroke-width="1.6"/>
+      <polygon points="${hexPoints(9, 100, 216)}" fill="none" stroke="${trim}" stroke-width="1.8" filter="url(#${id}eg)"/>`;
+  }
+
+  return `<svg class="avatar" width="${size}" height="${Math.round(size * 1.2)}" viewBox="0 0 200 240" aria-label="Your character">
+    <defs>
+      <radialGradient id="${id}aura" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${trim}" stop-opacity="${0.18 + tier * 0.1}"/><stop offset="1" stop-color="${trim}" stop-opacity="0"/></radialGradient>
+      <linearGradient id="${id}hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(hc, 0.12)}"/><stop offset="1" stop-color="${shade(hc, -0.12)}"/></linearGradient>
+      <linearGradient id="${id}skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${skin}"/><stop offset="1" stop-color="${shade(skin, -0.06)}"/></linearGradient>
+      <linearGradient id="${id}iris" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(eye, -0.3)}"/><stop offset=".6" stop-color="${eye}"/><stop offset="1" stop-color="${shade(eye, 0.25)}"/></linearGradient>
+      <linearGradient id="${id}cloth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tier === 1 ? '#232b56' : '#141a3c'}"/><stop offset="1" stop-color="#080b1c"/></linearGradient>
+      <clipPath id="${id}cl"><path d="${eyeL}"/></clipPath>
+      <clipPath id="${id}cr"><path d="${eyeR}"/></clipPath>
+      <filter id="${id}eg" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    ${aura ? `<circle cx="100" cy="128" r="${96 + tier * 4}" fill="url(#${id}aura)"/>` : ''}
+    ${hair.back ? `<path d="${hair.back}" fill="${shade(hc, -0.08)}"/>` : ''}
+    ${outfit}
+    <path d="M88 130L88 166C94 171 106 171 112 166L112 130Z" fill="${shade(skin, -0.12)}"/>
+    <path d="M67 98C60 94 58 106 64 112C66 114 68 112 68 108ZM133 98C140 94 142 106 136 112C134 114 132 112 132 108Z" fill="${shade(skin, -0.05)}"/>
+    <path d="M66 92C64 66 80 50 100 50C120 50 136 66 134 92C134 112 124 132 108 143C104 146 96 146 92 143C76 132 66 112 66 92Z" fill="url(#${id}skin)"/>
+    <path d="${hair.front}" fill="url(#${id}hair)"/>
+    <path d="M80 58C90 52 110 52 122 58" fill="none" stroke="${shade(hc, 0.35)}" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+    <path d="M73 92C79 88 88 88 95 92M127 92C121 88 112 88 105 92" fill="none" stroke="${shade(hc, -0.2)}" stroke-width="2.6" stroke-linecap="round" opacity=".9"/>
+    <path d="${eyeL}" fill="#fbfcff"/><path d="${eyeR}" fill="#fbfcff"/>
+    ${iris(85, 'cl')}${iris(115, 'cr')}
+    <path d="M73 103C76 95 91 93 97 100M129 103C124 95 109 93 103 100" fill="none" stroke="#17131f" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M73.5 103L70 100M126.5 103L130 100" fill="none" stroke="#17131f" stroke-width="2" stroke-linecap="round"/>
+    <path d="M80 115.5C83 116.5 88 116.5 91 115M120 115.5C117 116.5 112 116.5 109 115" fill="none" stroke="#17131f" stroke-width="1" opacity=".5"/>
+    <path d="M101 116L99 123L102 123" fill="none" stroke="${shade(skin, -0.22)}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M94 132C98 134 102 134 106 131" fill="none" stroke="${shade(skin, -0.38)}" stroke-width="1.7" stroke-linecap="round"/>
+  </svg>`;
 }
 
 /* ---------- Ring counter ---------- */

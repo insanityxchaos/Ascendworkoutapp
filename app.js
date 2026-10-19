@@ -1,14 +1,14 @@
 import { $, esc, plural, clamp, roundTo, fmtNum, dateKey, addDays, daysBetween, prettyDate } from './util.js';
 import {
   EQUIPMENT, EQUIPMENT_PRESETS, GOALS, EXPERIENCE, PATTERNS, TEMPLATES, SPLIT_NAMES, STATS, RANKS,
-  WORKOUT_TYPES, SUGGESTIONS, DOW, WEEK_ORDER, SHOP, THEMES, TITLES,
+  WORKOUT_TYPES, SUGGESTIONS, DOW, WEEK_ORDER, SHOP, THEMES, TITLES, AVATAR_OPTIONS,
 } from './data.js';
 import * as C from './calc.js';
 import * as P from './plan.js';
 import * as Photos from './photos.js';
 import * as Game from './game.js';
 import { G } from './game.js';
-import { scene, emblem, badge, icon, coin, figure, ring, setRing } from './art.js';
+import { scene, emblem, badge, icon, coin, figure, ring, setRing, avatar } from './art.js';
 import { sfx, setSoundEnabled } from './sound.js';
 
 const S = () => G.state;
@@ -66,7 +66,13 @@ function pump() {
   const levels = list.filter(n => n.type === 'level');
   for (const n of list) {
     if (n.type === 'toast') toast(n.text);
-    else if (n.type === 'quest') queueModal(questCompleteHtml(n), 'celebrate', 'quest');
+    else if (n.type === 'mini') {
+      toast(`Quest ${n.n}/${n.total} cleared · +${n.xp} XP · +${n.gold} Gold`);
+      sfx('unlock');
+    } else if (n.type === 'side') {
+      toast(`Bonus quest cleared · +${n.xp} XP · +${n.gold} Gold`);
+      sfx('coin');
+    } else if (n.type === 'quest') queueModal(questCompleteHtml(n), 'celebrate', 'quest');
     else if (n.type === 'level' && n === levels[0]) {
       queueModal(levelUpHtml(levels[0].from, levels[levels.length - 1].to), 'celebrate', 'level');
     } else if (n.type === 'rank') queueModal(rankUpHtml(n.rank), 'celebrate rank', 'rank');
@@ -138,17 +144,27 @@ const pct = (cur, prev) => {
   return `${p >= 0 ? '+' : ''}${p}%`;
 };
 
+const fmtSec = t => (t >= 120 ? `${fmtNum(t / 60)} min` : `${t} s`);
+
 function prescriptionText(e, ex) {
-  if (ex.kind === 'time') return `${e.sets} × ${e.hi} s${ex.pattern === 'cond' ? ' work' : ''}`;
+  if (ex.kind === 'time') return `${e.sets} × ${fmtSec(e.hi)}${ex.pattern === 'cond' ? ' work' : ''}${ex.perSide ? ' per side' : ''}`;
   const reps = e.lo === e.hi ? e.hi : `${e.lo}–${e.hi}`;
   const load = ex.kind === 'load' ? ` @ ${C.fmtW(S(), e.w)}${ex.perHand ? ' each' : ''}` : '';
   return `${e.sets} × ${reps}${ex.perSide ? ' per side' : ''}${load}`;
 }
 
 const questTitle = q => (q.type === 'workout' ? TEMPLATES[q.template].name : 'Recovery Day');
-const questDesc = q => (q.type === 'workout'
-  ? `${plural(q.exercises.length, 'exercise')} · ~${S().sessionMin} min`
-  : 'Light movement so your muscles can rebuild.');
+const questDesc = q => {
+  if (q.type !== 'workout') return 'Light movement so your muscles can rebuild.';
+  if (q.light) return `${plural(q.exercises.length, 'quest')} · easy cardio, core and mobility · ~15 min`;
+  return `${plural(q.exercises.length, 'quest')} · ~${S().sessionMin} min`;
+};
+
+// "Complete 3 sets of goblet squats" style mini quest names.
+function miniTitle(e, ex) {
+  if (ex.pattern === 'cardio') return `${ex.name}: ${fmtSec(e.hi)}`;
+  return `Complete ${plural(e.sets, 'set')} of ${ex.name}`;
+}
 
 function rewardsHtml(q) {
   const boost = Game.boostActive();
@@ -156,6 +172,42 @@ function rewardsHtml(q) {
     <span class="reward">${icon('star', 16)} +${Math.round(q.reward * (boost ? 1.5 : 1))} XP${boost ? ' <em>boosted</em>' : ''}</span>
     <span class="reward gold">${coin(16)} +${Game.questGold(q)} Gold</span>
   </div>`;
+}
+
+const miniReward = e => `<span class="mini-reward">+${Math.round((e.xp || 0) * (Game.boostActive() ? 1.5 : 1))} XP · +${e.gold || 0} ${coin(12)}</span>`;
+
+function rankTier(level) {
+  const i = 5 - RANKS.indexOf(Game.rankFor(level)); // E=0 … S=5
+  return i < 2 ? 1 : i < 4 ? 2 : 3;
+}
+
+function playerAvatar(size, look = S().avatar, level = S().level) {
+  return avatar(look, { size, tier: rankTier(level), rankColor: Game.rankFor(level).color });
+}
+
+function sideQuestsHtml(compact = false) {
+  const list = Game.todaySide();
+  return `
+    <section class="card">
+      <div class="row-between"><span class="eyebrow">Bonus Quests</span><span class="muted small">Optional · no penalty</span></div>
+      ${list.map((q, i) => {
+        const d = Game.sideDef(q.id);
+        const pctDone = Math.min(100, (q.progress / q.target) * 100);
+        return `
+          <div class="side${q.done ? ' done' : ''}">
+            <div class="row-between"><b>${d.text.replace('{n}', q.target)}</b><span class="mini-reward">+${q.xp} XP · +${q.gold} ${coin(12)}</span></div>
+            <div class="bar${q.done ? ' ok' : ''}"><i style="width:${pctDone}%"></i></div>
+            ${q.done ? `<span class="side-done">${icon('check', 14)} Cleared</span>` : `
+              <div class="side-controls">
+                <span class="muted small">${q.progress} / ${q.target} ${d.unit}</span>
+                ${compact ? '' : `<button class="mini" data-action="side-step" data-v="${i}" data-dir="-1">−${d.step}</button>`}
+                <button class="mini" data-action="side-step" data-v="${i}" data-dir="1">+${d.step}</button>
+                <button class="mini" data-action="side-step" data-v="${i}" data-dir="2">+${d.step * 2}</button>
+                <button class="mini ok" data-action="side-done" data-v="${i}">Done</button>
+              </div>`}
+          </div>`;
+      }).join('')}
+    </section>`;
 }
 
 function updateCountdown() {
@@ -245,7 +297,7 @@ let sdraft = {};
 function blankDraft() {
   return {
     name: '', sex: 'male', age: '', units: 'imperial', hFt: '', hIn: '', hCm: '', w: '', target: '',
-    goal: null, experience: null, equipment: {}, trainingDays: [1, 3, 5], sessionMin: '45',
+    goal: null, experience: null, equipment: {}, trainingDays: [1, 3, 5], sessionMin: '45', avatar: null,
   };
 }
 
@@ -268,6 +320,7 @@ function draftFromState(s) {
   const d = {
     name: s.name, sex: s.sex, age: String(s.age), units: s.units, goal: s.goal, experience: s.experience,
     equipment: { ...s.equipment }, trainingDays: [...s.trainingDays], sessionMin: String(s.sessionMin),
+    avatar: { ...s.avatar },
   };
   setDraftBody(d, s.heightCm, s.weightKg);
   d.target = s.targetKg ? fmtNum(C.toDispW(d, s.targetKg), 0) : '';
@@ -280,6 +333,7 @@ function draftProfile(d) {
     heightCm: draftHeightCm(d), weightKg: draftWeightKg(d), goal: d.goal, experience: d.experience,
     equipment: { ...d.equipment }, trainingDays: [...d.trainingDays].sort(), sessionMin: +d.sessionMin,
     targetKg: +d.target > 0 ? C.fromDispW(d, +d.target) : null,
+    avatar: d.avatar ? { ...d.avatar } : Game.defaultAvatar(d.sex),
   };
 }
 
@@ -409,12 +463,38 @@ function summaryHtml(p) {
     ${p.age < 18 ? '<p class="hint center">Under 18: calorie targets are kept gentle because you\'re still growing.</p>' : ''}`;
 }
 
+function avatarFields() {
+  if (!sdraft.avatar) sdraft.avatar = Game.defaultAvatar(sdraft.sex);
+  const a = sdraft.avatar;
+  const level = S() ? S().level : 1;
+  const swatches = (field, colors) => `<div class="swatches">${colors.map(c =>
+    `<button class="sw${a[field] === c ? ' on' : ''}" style="--c:${c}" data-action="av-set" data-field="${field}" data-v="${c}" aria-label="${c}"></button>`).join('')}</div>`;
+  return `
+    <div class="av-preview">${avatar(a, { size: 170, tier: rankTier(level), rankColor: Game.rankFor(level).color })}</div>
+    <div class="field"><span>Hair style</span><div class="seg">${AVATAR_OPTIONS.hair.map(([v, label]) =>
+      `<button class="${a.hair === v ? 'on' : ''}" data-action="av-set" data-field="hair" data-v="${v}">${label}</button>`).join('')}</div></div>
+    <div class="field"><span>Hair color</span>${swatches('hairColor', AVATAR_OPTIONS.hairColor)}</div>
+    <div class="field"><span>Eye color</span>${swatches('eyes', AVATAR_OPTIONS.eyes)}</div>
+    <div class="field"><span>Skin tone</span>${swatches('skin', AVATAR_OPTIONS.skin)}</div>
+    <p class="hint">Your outfit and aura upgrade as you rank up: a jacket at C-Rank, armored coat at A-Rank.</p>`;
+}
+
+function openAvatarEditor() {
+  sdraft = { sex: S().sex, avatar: { ...S().avatar } };
+  queueModal(() => `
+    <h2 class="modal-title">Your Character</h2>
+    ${avatarFields()}
+    <button class="btn" data-action="save-avatar">Save</button>
+    <button class="btn ghost" data-action="close">Cancel</button>`);
+}
+
 const OB_STEPS = [
   { title: 'Create Your Profile', sub: 'Let\'s set up your character.', body: profileFields },
   { title: 'Your Body', sub: 'Used for calories, body fat and goal estimates.', body: bodyFields },
   { title: 'Your Goal', sub: 'What are you training for?', body: goalFields },
   { title: 'Equipment', sub: 'Only exercises you can do will appear.', body: equipmentFields },
   { title: 'Schedule', sub: 'Pick the days you\'ll train.', body: scheduleFields },
+  { title: 'Your Character', sub: 'Make your Player look like you.', body: avatarFields },
   { title: 'Your Plan', sub: 'The System has built your training plan.', body: () => summaryHtml(previewProfile(sdraft)) },
 ];
 let obStep = 0;
@@ -486,7 +566,8 @@ function homeScreen() {
     </header>
 
     <section class="banner">
-      ${scene({ seed: 3, w: 400, h: 170, figure: true, bolts: 1, island: true, sparks: 14 })}
+      ${scene({ seed: 3, w: 400, h: 190, bolts: 1, island: true, sparks: 14 })}
+      <button class="banner-avatar" data-action="go" data-v="stats" aria-label="Your character">${playerAvatar(150)}</button>
       <div class="banner-chips">
         <span class="chip">${icon('flame', 14)} ${plural(streak, 'day')} streak</span>
         ${Game.boostActive() ? `<span class="chip boost">${icon('bolt', 14)} XP Boost active</span>` : ''}
@@ -501,17 +582,26 @@ function homeScreen() {
     ${banners.join('')}
 
     <section class="card quest-card${q.complete ? ' cleared' : ''}">
-      <div class="row-between"><span class="eyebrow">Today's Quest</span><span class="muted small">${icon('timer', 14)} <span class="countdown"></span></span></div>
+      <div class="row-between"><span class="eyebrow">Today's Quests · ${Game.miniCleared(q)}/${q.type === 'workout' ? q.exercises.length : 1}</span><span class="muted small">${icon('timer', 14)} <span class="countdown"></span></span></div>
       <h2 class="quest-title">${questTitle(q)}</h2>
       <p class="muted small">${questDesc(q)}</p>
-      <div class="row-between small"><span>${q.type === 'workout' ? 'Sets' : 'Tasks'}</span><span>${done} / ${total}</span></div>
       <div class="bar"><i style="width:${(done / total) * 100}%"></i></div>
-      ${rewardsHtml(q)}
-      ${q.complete
-        ? '<div class="stamp">Quest Clear</div>'
-        : `<button class="btn" data-action="${action}" data-v="quests">${q.type === 'workout' ? (started ? 'Continue Workout' : 'Start Workout') : 'View Recovery Quest'}</button>
-           <p class="warn">Not cleared by midnight = XP penalty</p>`}
+      ${q.type === 'workout' ? `<div class="mini-list">${q.exercises.map((e, i) => {
+        const ex = P.exById(e.id);
+        const cleared = e.done.every(Boolean);
+        return `<button class="mini-quest${cleared ? ' done' : ''}" data-action="start-workout" data-v="${i}" ${q.complete ? 'disabled' : ''}>
+          <span class="mq-check">${cleared ? icon('check', 14) : i + 1}</span>
+          <span class="mq-text">${miniTitle(e, ex)}</span>
+          ${cleared ? '' : miniReward(e)}
+        </button>`;
+      }).join('')}</div>` : ''}
+      ${q.complete ? '<div class="stamp">Quest Clear</div>' : `
+        <p class="hint">Clear every quest for a bonus: <b class="accent">+${q.bonusXp ?? q.reward} XP</b>${(q.bonusGold ?? Game.questGold(q)) ? ` · <b class="gold-text">+${q.bonusGold ?? Game.questGold(q)} Gold</b>` : ''}</p>
+        <button class="btn" data-action="${action}" data-v="quests">${started ? 'Continue Workout' : 'Start Workout'}</button>
+        <p class="warn">Uncleared quests at midnight = XP penalty</p>`}
     </section>
+
+    ${sideQuestsHtml(true)}
 
     <section class="card">
       <div class="row-between"><span class="eyebrow">Weekly Chest</span><span class="muted small">${Math.min(Game.weekCleared(), Game.CHEST_GOAL)} / ${Game.CHEST_GOAL} quests</span></div>
@@ -536,11 +626,17 @@ function questsScreen() {
     ? q.exercises.map((e, i) => {
       const ex = P.exById(e.id);
       const sets = e.done.filter(Boolean).length;
-      return `<div class="ex-row${sets === e.sets ? ' done' : ''}">
+      const cleared = sets === e.sets;
+      return `<div class="mq-card${cleared ? ' done' : ''}">
         <div class="ex-fig">${figure(e.pattern, 54)}</div>
-        <div class="ex-main"><b>${ex.name}</b><span>${prescriptionText(e, ex)}</span></div>
+        <div class="ex-main">
+          <span class="mq-label">Quest ${i + 1}${cleared ? ' · Cleared' : ''}</span>
+          <b>${miniTitle(e, ex)}</b>
+          <span>${prescriptionText(e, ex)}</span>
+          ${cleared ? '' : miniReward(e)}
+        </div>
         <span class="ex-count">${sets}/${e.sets}</span>
-        ${q.complete ? '' : `<button class="mini-btn" data-action="start-workout" data-v="${i}" aria-label="Go to ${ex.name}">${icon('chevron', 16)}</button>`}
+        ${q.complete ? '' : `<button class="mini-btn" data-action="start-workout" data-v="${i}" aria-label="Start ${ex.name}">${icon('chevron', 16)}</button>`}
       </div>`;
     }).join('')
     : q.tasks.map(t => `
@@ -555,17 +651,21 @@ function questsScreen() {
       <div class="hero-body">
         <span class="eyebrow">${prettyDate(dateKey(), { weekday: 'long', month: 'long', day: 'numeric' })}</span>
         <h2 class="quest-title">${questTitle(q)}</h2>
-        <div class="row-between small"><span>${done} / ${total} ${workout ? 'sets' : 'tasks'}</span><span class="muted">${icon('timer', 14)} <span class="countdown"></span></span></div>
+        <p class="muted small">${questDesc(q)}</p>
+        <div class="row-between small"><span>${workout ? `${Game.miniCleared(q)} / ${q.exercises.length} quests` : `${done} / ${total} tasks`}</span><span class="muted">${icon('timer', 14)} <span class="countdown"></span></span></div>
         <div class="bar"><i style="width:${(done / total) * 100}%"></i></div>
-        <h3>Rewards</h3>
+        <h3>Total Rewards</h3>
         ${rewardsHtml(q)}
-        <h3>${workout ? 'Exercises' : 'Tasks'}</h3>
+        ${workout && !q.complete ? `<p class="hint" style="margin-top:6px">Each quest pays its share as you clear it. Clearing all of them adds a bonus of +${q.bonusXp} XP and +${q.bonusGold} Gold.</p>` : ''}
+        <h3>${workout ? 'Quests' : 'Tasks'}</h3>
         <div class="${workout ? '' : 'tasks'}">${desc}</div>
         ${q.complete ? '<div class="stamp">Quest Clear</div>'
-          : workout ? `<button class="btn" data-action="start-workout">${done ? 'Continue Quest' : 'Start Quest'}</button>`
+          : workout ? `<button class="btn" data-action="start-workout">${done ? 'Continue Quests' : 'Start Quests'}</button>`
             : '<p class="hint center">Tap each task when it\'s done. Recovery days let your muscles rebuild.</p>'}
       </div>
     </section>
+
+    ${sideQuestsHtml()}
 
     <section class="card">
       <div class="row-between"><h3>This Week</h3><button class="link" data-action="open-profile">Edit plan</button></div>
@@ -582,15 +682,18 @@ function weekHtml(q) {
     const isToday = d === todayDow;
     let detail = '';
     if (openDay === d) {
-      const list = t ? (isToday && q.type === 'workout' ? q.exercises : P.buildWorkout(S(), t)) : null;
-      detail = `<div class="day-detail">${list
-        ? list.map(e => { const ex = P.exById(e.id); return `<div class="day-ex"><b>${ex.name}</b><span>${prescriptionText(e, ex)}</span></div>`; }).join('')
-        : P.buildRecovery(S()).map(x => `<div class="day-ex"><b>${x.name}</b></div>`).join('')}</div>`;
+      const dayKey = addDays(Game.weekStart(), (d + 6) % 7);
+      const list = isToday && q.type === 'workout' ? q.exercises
+        : t ? P.buildWorkout(S(), t) : P.buildRecoveryWorkout(S(), dayKey);
+      detail = `<div class="day-detail">${list.map(e => {
+        const ex = P.exById(e.id);
+        return `<div class="day-ex"><b>${ex.name}</b><span>${prescriptionText(e, ex)}</span></div>`;
+      }).join('')}</div>`;
     }
     return `
       <button class="day${isToday ? ' today' : ''}${t ? ' train' : ''}" data-action="day" data-v="${d}">
         <span class="day-name">${DOW[d]}${isToday ? ' · Today' : ''}</span>
-        <span class="day-what">${t ? TEMPLATES[t].name : 'Recovery'}</span>
+        <span class="day-what">${t ? TEMPLATES[t].name : 'Active Recovery'}</span>
         <span class="chev${openDay === d ? ' open' : ''}">${icon('chevron', 16)}</span>
       </button>${detail}`;
   }).join('');
@@ -625,6 +728,7 @@ let timer = null; // { until, total }
 
 function restSeconds(e) {
   const ex = P.exById(e.id);
+  if (ex.pattern === 'mobility' || ex.pattern === 'cardio') return 15;
   if (ex.pattern === 'cond') return 30;
   if (ex.kind === 'time') return 45;
   if (ex.kind === 'load') return e.main ? (S().goal === 'strength' ? 150 : 105) : 75;
@@ -693,13 +797,14 @@ function workoutScreen() {
     <section class="workout">
       <header class="pagehead sub">
         <button class="back" data-action="back" aria-label="Back">${icon('back', 22)}</button>
-        <h1 class="title">Quest Progress <span class="accent">${exDone}/${n}</span></h1>
+        <h1 class="title">Quest <span class="accent">${wIdx + 1}/${n}</span></h1>
         <div class="pagehead-right"><button class="icon-btn" data-action="w-list" aria-label="All exercises">${icon('list', 20)}</button></div>
       </header>
       <div class="bar thin"><i style="width:${(done / total) * 100}%"></i></div>
       <div class="pips">${q.exercises.map((x, k) => `<button class="pip${k === wIdx ? ' cur' : ''}${x.done.every(Boolean) ? ' done' : ''}" data-action="w-go" data-v="${k}" aria-label="Exercise ${k + 1}"></button>`).join('')}</div>
+      <p class="mq-label center">${miniTitle(e, ex)} ${e.done.every(Boolean) ? '· Cleared' : miniReward(e)}</p>
       <h2 class="ex-title">${ex.name}</h2>
-      <p class="ex-sub">${setIdx < 0 ? 'All sets done' : `Set ${setIdx + 1} of ${e.sets}`} · ${prescriptionText(e, ex)}</p>
+      <p class="ex-sub">${setIdx < 0 ? 'All sets done' : `Set ${setIdx + 1} of ${e.sets}`} · ${prescriptionText(e, ex)} · ${exDone}/${n} cleared</p>
       <div class="ex-scene">${scene({ seed: 50 + wIdx, w: 400, h: 180, picto: e.pattern, moon: false, sparks: 10 })}</div>
       ${body}
       <div class="links">
@@ -734,6 +839,7 @@ function completeCurrentSet(reps) {
   const secs = restSeconds(e);
   rest = { until: Date.now() + secs * 1000, total: secs };
   render();
+  pump();
 }
 
 function updateTimers() {
@@ -805,10 +911,16 @@ function statsScreen() {
   return `
     ${pageHead('Character')}
     <section class="card char-card">
+      <div class="char-portrait">
+        <div class="char-scene">${scene({ seed: 77, w: 400, h: 230, moon: true, sparks: 14, city: true })}</div>
+        <div class="char-avatar">${playerAvatar(190)}</div>
+        <button class="mini char-edit" data-action="edit-avatar">${icon('palette', 14)} Customize</button>
+      </div>
       <div class="char-top">
-        <div><b class="lv-big">Lv. ${s.level}</b><span class="muted small">${esc(Game.titleFor())} · ${next ? `${next.rank}-Rank at Lv. ${next.min}` : 'Max rank'}</span></div>
+        <div><b class="lv-big">${esc(s.name)} · Lv. ${s.level}</b><span class="muted small">${esc(Game.titleFor())} · ${next ? `${next.rank}-Rank at Lv. ${next.min}` : 'Max rank'}</span></div>
         ${emblem(r.rank, r.color, { size: 54 })}
       </div>
+      <p class="hint" style="margin-top:4px">Your outfit and aura evolve at C-Rank and A-Rank.</p>
       <div class="xpbar"><i style="width:${Math.min(100, (s.xp / need) * 100)}%"></i></div>
       <div class="row-between small muted"><span>${s.totalXp.toLocaleString()} total XP</span><span>${s.xp} / ${need} XP</span></div>
     </section>
@@ -896,7 +1008,7 @@ function potentialHtml() {
 
 function recordHtml() {
   const s = S();
-  const workouts = Object.values(s.quests).filter(q => q.complete && q.type === 'workout');
+  const workouts = Object.values(s.quests).filter(q => q.complete && !Game.isLight(q));
   let sets = 0;
   let volume = 0;
   for (const q of workouts) {
@@ -964,7 +1076,7 @@ function moreScreen() {
   return `
     ${pageHead('More')}
     <section class="card profile-card">
-      ${emblem(r.rank, r.color, { size: 64 })}
+      <span class="profile-avatar">${playerAvatar(72)}</span>
       <div><b>${esc(s.name)}</b><span>Lv. ${s.level} · ${esc(Game.titleFor())}</span><span>${GOALS[s.goal].name} · ${s.trainingDays.length} days/week</span></div>
     </section>
     <section class="card menu">
@@ -1128,10 +1240,11 @@ function historyScreen() {
   const items = [];
   for (const [k, q] of Object.entries(s.quests)) {
     if (!q.complete) continue;
-    if (histFilter !== 'all' && histFilter !== q.type) continue;
+    const light = Game.isLight(q);
+    if (histFilter !== 'all' && histFilter !== (light ? 'recovery' : 'workout')) continue;
     const sets = q.type === 'workout' ? q.exercises.reduce((n, e) => n + e.done.length, 0) : 0;
     items.push({
-      k, ts: q.completedAt || 0, key: k, icon: q.type === 'workout' ? 'dumbbell' : 'moon', title: questTitle(q),
+      k, ts: q.completedAt || 0, key: k, icon: light ? 'moon' : 'dumbbell', title: questTitle(q),
       detail: q.type === 'workout' ? `${plural(q.exercises.length, 'exercise')} · ${plural(sets, 'set')}` : 'Recovery quest',
       xp: q.xpEarned ?? q.reward, gold: q.goldEarned ?? Game.questGold(q), q,
     });
@@ -1178,7 +1291,7 @@ function calendarHtml() {
     const k = dateKey(new Date(y, m, d));
     const q = s.quests[k];
     let cls = 'd';
-    if (q && q.complete) cls += q.type === 'workout' ? ' done' : ' rec';
+    if (q && q.complete) cls += Game.isLight(q) ? ' rec' : ' done';
     else if (s.shielded[k]) cls += ' shield';
     else if (k < today && k >= s.created) cls += ' miss';
     if (k === today) cls += ' today';
@@ -1291,6 +1404,7 @@ function settingsScreen() {
     ${subHead('Settings')}
     <section class="card menu">
       ${row('user', 'Profile & Plan', 'Name, body, goal, equipment, training days', 'open-profile')}
+      ${row('palette', 'Character Appearance', 'Hair, eyes and skin tone', 'edit-avatar')}
       ${row('sound', 'Sound Effects', s.sound ? 'On' : 'Off', 'toggle-sound', `<span class="switch${s.sound ? ' on' : ''}"><i></i></span>`)}
     </section>
     <section class="card">
@@ -1586,8 +1700,10 @@ function questCompleteHtml(n) {
     <div class="celebrate-body">
       <p class="eyebrow glow">${n.q.type === 'workout' ? TEMPLATES[n.q.template].name : 'Recovery Quest'}</p>
       <h1 class="display big">Quest<br>Complete!</h1>
+      ${n.q.type === 'workout' ? '<p class="muted" style="margin:10px 0 0">All quests cleared · Clear bonus</p>' : ''}
       <div class="reward-big">${icon('star', 22)} +${n.xp} XP</div>
       <div class="reward-big gold">${coin(22)} +${n.gold} Gold</div>
+      ${n.totalXp && n.totalXp !== n.xp ? `<p class="muted small">Today's total: ${n.totalXp} XP · ${n.totalGold} Gold</p>` : ''}
       ${n.bonus ? '<p class="gold-text">7-day streak bonus: +1 stat point</p>' : ''}
       ${gains.length ? `<div class="gain-row">${gains.map(([k, v]) => `<span>${STATS.find(x => x.key === k).abbr} +${v}</span>`).join('')}</div>` : ''}
       ${n.notes.length ? `<div class="notes">${n.notes.map(t => `<p>▲ ${esc(t)}</p>`).join('')}</div>` : ''}
@@ -1602,6 +1718,7 @@ function levelUpHtml(from, to) {
     <div class="celebrate-body">
       <p class="eyebrow glow">[ System Notice ]</p>
       <h1 class="display big">Level Up</h1>
+      <div class="celebrate-avatar">${playerAvatar(170, S().avatar, to)}</div>
       <div class="level-num">Lv. ${to}</div>
       <p class="lead">You gained ${(to - from) * Game.STAT_POINTS_PER_LEVEL} stat points.</p>
       <button class="btn" data-action="close-to" data-v="stats">Allocate Points</button>
@@ -1774,6 +1891,15 @@ document.addEventListener('click', e => {
     // Settings
     case 'open-profile': openProfile(); break;
     case 'save-profile': saveProfile(); break;
+    case 'edit-avatar': openAvatarEditor(); break;
+    case 'av-set':
+      if (!sdraft.avatar) sdraft.avatar = Game.defaultAvatar(sdraft.sex);
+      sdraft.avatar = { ...sdraft.avatar, [field]: v };
+      refreshForm();
+      break;
+    case 'save-avatar': S().avatar = { ...sdraft.avatar }; Game.save(); nextModal(); render(); toast('Character updated'); break;
+    case 'side-step': Game.sideStep(Number(v), Number(el.dataset.dir)); sfx('tap'); render(); pump(); break;
+    case 'side-done': Game.sideFinish(Number(v)); render(); pump(); break;
     case 'toggle-sound': S().sound = !S().sound; setSoundEnabled(S().sound); Game.save(); sfx('tap'); render(); break;
     case 'help': queueModal(helpHtml()); break;
     case 'about': queueModal(aboutHtml()); break;

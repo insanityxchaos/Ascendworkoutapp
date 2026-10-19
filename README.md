@@ -5,7 +5,9 @@ A free, gamified training app for iPhone. Setup asks about your body, goal, equi
 ## Features
 
 - **Personal plan.** Pick your training days (1–6 a week), workout length, goal (lose fat, build muscle, recomp, get stronger), experience level, and equipment (bodyweight only, home gym, full gym, or any mix). Only exercises you can do with your equipment show up.
-- **Daily Quest = today's workout.** On training days it's your workout. On other days it's a light recovery quest (walk, stretch, protein). Log each set with the reps you actually got. Swap any exercise for another option that uses the same movement.
+- **Daily quests are workouts, every day.** Training days are your full workout; other days are a ~15-minute Active Recovery workout (easy cardio, core, mobility). Each exercise is its own quest ("Complete 3 sets of goblet squats") with its own XP and Gold, plus a bonus for clearing them all. Missing a day only penalizes the quests you didn't clear. Swap any exercise for another option that uses the same movement.
+- **Bonus quests.** Two optional challenges a day, e.g. "Do 40 push-ups" or "Hold a plank for 2 minutes total", scaled to your level, for extra XP and Gold. No penalty for skipping.
+- **Your Player character.** An anime-style character you customize (hairstyle, hair, eye and skin color). Its outfit and aura evolve at C-Rank and A-Rank.
 - **Automatic progression.** Hit the top of the rep range on every set and the weight goes up next time. For bodyweight moves, you graduate to a harder version (incline push-up → push-up → decline → archer).
 - **Strength potential.** Your estimated 1-rep max and rep maxes now, plus projections for 3 months, 6 months and 1 year, and a realistic natural ceiling. It uses published strength standards for your sex and bodyweight. The numbers firm up as you log workouts or take a max test.
 - **Body and goals.** Calories (Mifflin-St Jeor), protein, body fat (U.S. Navy tape method, or a BMI estimate until you measure), a suggested goal weight with a date, and a "where you could be in 1/3/6/12 months" projection with a chart. Shows your natural muscle potential based on your height.

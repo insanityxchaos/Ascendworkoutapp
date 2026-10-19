@@ -8,9 +8,9 @@ const BY_ID = Object.fromEntries(EXERCISES.map(e => [e.id, e]));
 export const exById = id => BY_ID[id];
 
 export const workoutReward = level => 60 + level * 5;
-export const recoveryReward = level => 30 + level * 2;
+export const recoveryReward = level => 40 + level * 3;
 export const workoutGold = level => 10 + Math.floor(level / 2);
-export const recoveryGold = level => 5 + Math.floor(level / 5);
+export const recoveryGold = level => 7 + Math.floor(level / 4);
 
 const LOAD_PRIORITY = { barbell: 4, db: 3, kb: 2.5, machine: 2 };
 const loadScore = ex => Math.max(0, ...[...ex.eq, ...(ex.any || [])].map(e => LOAD_PRIORITY[e] || 0));
@@ -97,6 +97,7 @@ export function buildWorkout(s, templateId) {
   return out;
 }
 
+// Older saves used a checklist on rest days; kept so those history entries still display.
 export function buildRecovery(s) {
   return [
     { id: 'walk', name: `Walk ${s.goal === 'fatloss' ? 30 : 20} minutes`, done: false },
@@ -105,12 +106,57 @@ export function buildRecovery(s) {
   ];
 }
 
+const fixedEntry = (ex, slotKey, sets, target) => ({
+  id: ex.id, slotKey, pattern: ex.pattern, main: false, sets, lo: target, hi: target, w: null, cur: target, done: Array(sets).fill(null),
+});
+
+// Non-training days: ~15 minutes of easy cardio, core and mobility. Mobility moves rotate day to day.
+export function buildRecoveryWorkout(s, dayKey) {
+  const out = [];
+  const swapped = pattern => s.swaps[`recovery:${pattern}`] && exById(s.swaps[`recovery:${pattern}`]);
+  const cardio = swapped('cardio') || exById('easy_cardio');
+  out.push(fixedEntry(cardio, 'recovery:cardio', 1, (s.goal === 'fatloss' ? 15 : 10) * 60));
+  const core = swapped('core') || pickExercise(s, 'core', 0, 'recovery:core');
+  if (core) {
+    const e = makeEntry(s, core, 'recovery:core', false);
+    e.sets = 2;
+    e.done = [null, null];
+    out.push(e);
+  }
+  const mobility = candidates(s, 'mobility').all;
+  const offset = Math.floor(parseKey(dayKey) / 86400000) % mobility.length;
+  for (let i = 0; i < 3; i++) {
+    const ex = mobility[(offset + i * 2) % mobility.length];
+    if (out.some(e => e.id === ex.id)) continue;
+    out.push(fixedEntry(ex, `recovery:mobility${i}`, 2, ex.kind === 'time' ? (s.experience === 'new' ? 30 : 45) : 10));
+  }
+  return out;
+}
+
+/*
+ * Each exercise is its own mini quest with a share of the day's XP and gold.
+ * The rest is paid as a bonus for clearing every mini quest.
+ */
+export function splitRewards(q) {
+  if (q.type !== 'workout' || q.bonusXp != null) return q;
+  const n = q.exercises.length || 1;
+  const xpEach = Math.round((q.reward * 0.6) / n);
+  const goldEach = Math.max(1, Math.floor((q.gold * 0.5) / n));
+  for (const e of q.exercises) {
+    e.xp = xpEach;
+    e.gold = goldEach;
+  }
+  q.bonusXp = Math.max(0, q.reward - xpEach * n);
+  q.bonusGold = Math.max(0, q.gold - goldEach * n);
+  return q;
+}
+
 export function buildQuest(s, dayKey) {
   const template = templateForDay(s, parseKey(dayKey).getDay());
-  if (template) {
-    return { type: 'workout', template, exercises: buildWorkout(s, template), reward: workoutReward(s.level), gold: workoutGold(s.level), complete: false };
-  }
-  return { type: 'recovery', tasks: buildRecovery(s), reward: recoveryReward(s.level), gold: recoveryGold(s.level), complete: false };
+  const q = template
+    ? { type: 'workout', template, exercises: buildWorkout(s, template), reward: workoutReward(s.level), gold: workoutGold(s.level), complete: false }
+    : { type: 'workout', light: true, template: 'recovery', exercises: buildRecoveryWorkout(s, dayKey), reward: recoveryReward(s.level), gold: recoveryGold(s.level), complete: false };
+  return splitRewards(q);
 }
 
 export const questStarted = q => (q.type === 'workout' ? q.exercises.some(e => e.done.some(Boolean)) : q.tasks.some(t => t.done));
@@ -130,6 +176,7 @@ export function applyProgression(s, quest) {
   const notes = [];
   for (const e of quest.exercises) {
     const ex = exById(e.id);
+    if (ex.pattern === 'mobility' || ex.pattern === 'cardio') continue; // recovery work stays easy
     const rec = (s.lifts[e.id] = s.lifts[e.id] || {});
     const reps = e.done.map(d => d.r);
     const allTop = reps.every(r => r >= e.hi);
